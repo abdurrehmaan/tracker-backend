@@ -8,12 +8,13 @@ class DeviceModel {
     device_id: string,
     user_id: string,
     tracker_model: string,
-    device_type: string
+    device_type: string,
+    purchase_date: string = new Date().toISOString().split("T")[0] // Default to today's date in YYYY-MM-DD format
   ): Promise<any> {
     // table : public.device_inventory
     // fields : imei , iradium_imei, device_id , user_id, device_type
     //   create add table to inventory
-    const query = `insert into public.device_inventory (imei, iradium_imei, device_id, user_id,tracker_model, device_type) values ($1, $2, $3, $4, $5, $6) returning *`;
+    const query = `insert into public.device_inventory (imei, iradium_imei, device_id, user_id,tracker_model, device_type, purchase_date) values ($1, $2, $3, $4, $5, $6, $7) returning *`;
 
     try {
       const result = await pool.pool.query(query, [
@@ -23,6 +24,7 @@ class DeviceModel {
         user_id,
         tracker_model,
         device_type,
+        purchase_date   
       ]);
       return result.rows[0];
     } catch (error) {

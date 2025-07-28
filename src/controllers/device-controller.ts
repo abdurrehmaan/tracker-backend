@@ -20,23 +20,48 @@ declare global {
 
 // Middleware to authenticate user
 class DevicesController {
-  
-
-
-
   static async addDevice(req: Request, res: Response, next: NextFunction) {
     try {
-      console.log("Adding new device...");
-      const { imei, iradium_imei, device_id, user_id, tracker_model, device_type } = req.body;
-
-      console.log('request body', req.body)
-
-      // Validate required fields
-      if (!imei || !iradium_imei || !device_id || !user_id || !tracker_model || !device_type) {
-        return res.status(400).json({
-          success: false,
-          message: "All fields are required"
-        });
+      const {
+        imei,
+        iradium_imei,
+        device_id,
+        user_id,
+        tracker_model,
+        device_type,
+        purchase_date,
+      } = req.body;
+      console.log("Adding device with data:", req.body);
+      if (device_type === "pmd") {
+        // Validate required fields
+        if (
+          !imei ||
+          !device_id ||
+          !user_id ||
+          !tracker_model ||
+          !device_type ||
+          !purchase_date
+        ) {
+          return res.status(400).json({
+            success: false,
+            message: "All fields are required2",
+          });
+        }
+      } else {
+        if (
+          !imei ||
+          !iradium_imei ||
+          !device_id ||
+          !user_id ||
+          !tracker_model ||
+          !device_type ||
+          !purchase_date
+        ) {
+          return res.status(400).json({
+            success: false,
+            message: "All fields are required1",
+          });
+        }
       }
 
       // Check uniqueness for imei
@@ -44,35 +69,44 @@ class DevicesController {
       if (existingByImei) {
         return res.status(409).json({
           success: false,
-          message: "Device with this IMEI already exists"
+          message: "Device with this IMEI already exists",
         });
       }
 
       // Check uniqueness for iradium_imei
-      const existingByIridium = await DeviceModel.getByIridiumImei?.(iradium_imei);
-      if (existingByIridium) {
-        return res.status(409).json({
-          success: false,
-          message: "Device with this Iridium IMEI already exists"
-        });
+      if (iradium_imei) {
+        const existingByIridium = await DeviceModel.getByIridiumImei?.(
+          iradium_imei
+        );
+        if (existingByIridium) {
+          return res.status(409).json({
+            success: false,
+            message: "Device with this Iridium IMEI already exists",
+          });
+        }
       }
-
       // Check uniqueness for device_id
       const existingByDeviceId = await DeviceModel.getByDeviceId?.(device_id);
       if (existingByDeviceId) {
         return res.status(409).json({
           success: false,
-          message: "Device with this Device ID already exists"
+          message: "Device with this Device ID already exists",
         });
       }
 
-    
-
-      const device = await DeviceModel.createDeviceInfo(imei, iradium_imei, device_id, user_id, tracker_model, device_type);
+      const device = await DeviceModel.createDeviceInfo(
+        imei,
+        iradium_imei,
+        device_id,
+        user_id,
+        tracker_model,
+        device_type,
+        purchase_date
+      );
       res.status(201).json({
         success: true,
         message: "Device added successfully",
-        data: device
+        data: device,
       });
     } catch (error) {
       next(error);
@@ -81,6 +115,7 @@ class DevicesController {
   static async getAllDevices(req: Request, res: Response, next: NextFunction) {
     try {
       console.log("Fetching all devices...");
+
       const devices = await DeviceModel.getAllDevices();
 
       res.status(200).json({
@@ -96,5 +131,3 @@ class DevicesController {
 
 // module.exports = DevicesController;
 export default DevicesController;
-
-
