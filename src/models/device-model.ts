@@ -167,6 +167,21 @@ LIMIT $1 OFFSET $2
       }
     }
   }
+
+  // update  device info
+  static async updateDeviceInfo(device_id: string, data: any): Promise<any> {
+    const query = "UPDATE public.device_inventory SET $1 WHERE device_id = $2";
+    try {
+      const result = await pool.pool.query(query, [data, device_id]);
+      return result.rows[0];
+    } catch (error) {
+      if (error instanceof Error) {
+        throw new Error(`Database query failed: ${error.message}`);
+      } else {
+        throw new Error("Database query failed: Unknown error");
+      }
+    }
+  }
 }
 
 export default DeviceModel;
