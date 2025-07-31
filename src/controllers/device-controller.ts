@@ -1,10 +1,4 @@
 import { Request, Response, NextFunction } from "express";
-import User from "../models/user-model";
-import Role from "../models/role-model";
-import { fakeAuth } from "../middlewares/auth-middleware";
-import express from "express";
-import bcrypt from "bcrypt";
-import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
 import DeviceModel from "../models/device-model";
 dotenv.config();
@@ -30,21 +24,22 @@ class DevicesController {
         tracker_model,
         device_type,
         purchase_date,
+        device_code,
       } = req.body;
-      console.log("Adding device with data:", req.body);
+
       if (device_type === "pmd") {
-        // Validate required fields
         if (
           !imei ||
           !device_id ||
           !user_id ||
           !tracker_model ||
           !device_type ||
-          !purchase_date
+          !purchase_date ||
+          !device_code
         ) {
           return res.status(400).json({
             success: false,
-            message: "All fields are required2",
+            message: "All fields are required",
           });
         }
       } else {
@@ -55,13 +50,47 @@ class DevicesController {
           !user_id ||
           !tracker_model ||
           !device_type ||
-          !purchase_date
+          !purchase_date ||
+          !device_code
         ) {
           return res.status(400).json({
             success: false,
-            message: "All fields are required1",
+            message: "All fields are required",
           });
         }
+      }
+
+      if (device_type === "pmd") {
+        if (!device_code.match(/^pmd-\d{3}$/)) {
+          return res.status(400).json({
+            success: false,
+            message: "Invalid device code format. It should be like pmd-001",
+          });
+        }
+      } else if (!device_code.match(/^csd-\d{3}$/)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid device code format. It should be like csd-001",
+        });
+      }
+
+      const isValidUUID = (id: string) =>
+        /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/.test(
+          id
+        );
+
+      if (!isValidUUID(user_id)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid user_id (must be a valid UUID)",
+        });
+      }
+
+      if (!isValidUUID(tracker_model)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid tracker_model (must be a valid UUID)",
+        });
       }
 
       // Check uniqueness for imei
@@ -85,23 +114,16 @@ class DevicesController {
           });
         }
       }
-      // Check uniqueness for device_id
-      const existingByDeviceId = await DeviceModel.getByDeviceId?.(device_id);
-      if (existingByDeviceId) {
-        return res.status(409).json({
-          success: false,
-          message: "Device with this Device ID already exists",
-        });
-      }
 
       const device = await DeviceModel.createDeviceInfo(
         imei,
         iradium_imei,
         device_id,
         user_id,
-        tracker_model,
-        device_type,
-        purchase_date
+        device_type, 
+        tracker_model, 
+        purchase_date,
+        device_code
       );
       res.status(201).json({
         success: true,
@@ -114,14 +136,30 @@ class DevicesController {
   }
   static async getAllDevices(req: Request, res: Response, next: NextFunction) {
     try {
-      console.log("Fetching all devices...");
+      // Read query params with defaults
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = parseInt(req.query.limit as string) || 10;
+      const offset = (page - 1) * limit;
 
-      const devices = await DeviceModel.getAllDevices();
+      // Fetch total count of devices (for pagination metadata)
+      const totalDevices = await DeviceModel.countDevices();
+
+      // Fetch devices for the current page
+      const devices = await DeviceModel.getDevicesWithPagination(limit, offset);
+
+      // Calculate total pages
+      const totalPages = Math.ceil(totalDevices / limit);
 
       res.status(200).json({
         success: true,
         message: "Devices retrieved successfully",
         data: devices,
+        pagination: {
+          totalDevices,
+          totalPages,
+          currentPage: page,
+          pageSize: limit,
+        },
       });
     } catch (error) {
       next(error);
