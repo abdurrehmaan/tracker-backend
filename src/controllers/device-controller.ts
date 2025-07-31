@@ -61,17 +61,12 @@ class DevicesController {
       }
 
       if (device_type === "pmd") {
-        if (!device_code.match(/^PMD-\d{4}$/)) {
+        if (!device_code.startsWith("PMD-")) {
           return res.status(400).json({
             success: false,
             message: "Invalid device code format. It should be like PMD-0001",
           });
         }
-      } else if (!device_code.match(/^CSD-\d{4}$/)) {
-        return res.status(400).json({
-          success: false,
-          message: "Invalid device code format. It should be like CSD-0001",
-        });
       }
 
       const isValidUUID = (id: string) =>
