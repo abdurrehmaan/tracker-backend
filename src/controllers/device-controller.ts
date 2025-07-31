@@ -61,16 +61,16 @@ class DevicesController {
       }
 
       if (device_type === "pmd") {
-        if (!device_code.match(/^pmd-\d{3}$/)) {
+        if (!device_code.match(/^PMD-\d{4}$/)) {
           return res.status(400).json({
             success: false,
-            message: "Invalid device code format. It should be like pmd-001",
+            message: "Invalid device code format. It should be like PMD-0001",
           });
         }
-      } else if (!device_code.match(/^csd-\d{3}$/)) {
+      } else if (!device_code.match(/^CSD-\d{4}$/)) {
         return res.status(400).json({
           success: false,
-          message: "Invalid device code format. It should be like csd-001",
+          message: "Invalid device code format. It should be like CSD-0001",
         });
       }
 
