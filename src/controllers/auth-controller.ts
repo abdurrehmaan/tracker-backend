@@ -71,9 +71,9 @@ class AuthController {
 
     static async registerUser(req: Request, res: Response, next: NextFunction) { 
         try {
-            const { username, email, password, role_id } = req.body;
+            const { name, email, password, role_id } = req.body;
             // Validate input
-            if (!username || !email || !password || !role_id) {
+            if (!name || !email || !password || !role_id) {
                 return res.status(400).json({
                     success: false,
                     message: "All fields are required"
@@ -81,11 +81,11 @@ class AuthController {
             }
 
             // Check for unique username
-            const existingUserByUsername = await User.getByUsername?.(username);
+            const existingUserByUsername = await User.getByUsername?.(name);
             if (existingUserByUsername) {
                 return res.status(409).json({
                     success: false,
-                    message: "Username already exists"
+                    message: "name already exists"
                 });
             }
 
@@ -109,7 +109,7 @@ class AuthController {
             // Hash password
             const hashedPassword = await bcrypt.hash(password, 10);
             // Create user
-            const newUser = await User.create({ username, email, password_hash: hashedPassword, role_id });
+            const newUser = await User.create({ name, email, password_hash: hashedPassword, role_id });
 
             res.status(201).json({
                 success: true,

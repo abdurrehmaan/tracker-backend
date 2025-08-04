@@ -44,10 +44,10 @@ class UserController {
   // POST create new user
   static async createUser(req: Request, res: Response, next: NextFunction) {
     try {
-      const { username, email, password_hash, role_id } = req.body;
+      const { name, email, password_hash, role_id } = req.body;
       
       // Validation
-      if (!username || !email || !password_hash || !role_id) {
+      if (!name || !email || !password_hash || !role_id) {
         return res.status(400).json({
           success: false,
           message: 'All fields are required'
@@ -63,7 +63,7 @@ class UserController {
         });
       }
 
-      const newUser = await User.create({ username, email, password_hash, role_id });
+      const newUser = await User.create({ name, email, password_hash, role_id });
       
       res.status(201).json({
         success: true,

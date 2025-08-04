@@ -1,7 +1,7 @@
 import pool from "../config/db"; // Adjust the path as needed to where your pool is exported
 
 interface UserData {
-  username: string;
+  name: string;
   email: string;
   password_hash: string;
   role_id: number;
@@ -41,7 +41,7 @@ export class User {
     const query = `
       SELECT 
         u.id,
-        u.username,
+        u.name,
         u.email,
         u.created_at,
         u.updated_at,
@@ -63,16 +63,16 @@ export class User {
   // Create new user
 
   static async create(userData: UserData) {
-    const { username, email, password_hash, role_id } = userData;
+    const { name, email, password_hash, role_id } = userData;
     const query = `
-      INSERT INTO public.users (username, email, password_hash, role_id, created_at)
+      INSERT INTO public.users (name, email, password_hash, role_id, created_at)
       VALUES ($1, $2, $3, $4, NOW())
-      RETURNING id, username, email, role_id, created_at
+      RETURNING id, name, email, role_id, created_at
     `;
 
     try {
       const result = await pool.pool.query(query, [
-        username,
+        name,
         email,
         password_hash,
         role_id,
@@ -87,7 +87,7 @@ export class User {
     const query = `
       SELECT 
         u.id,
-        u.username,
+        u.name,
         u.email,
         u.password_hash,
         u.created_at,
@@ -111,7 +111,7 @@ export class User {
     const query = `
       SELECT 
         id, 
-        username, 
+        name, 
         email, 
         created_at, 
         updated_at, 
@@ -128,21 +128,21 @@ export class User {
     }
   }
 
-  static async getByUsername(username: string) {
+  static async getByUsername(name: string) {
     const query = `
       SELECT 
         id, 
-        username, 
+        name, 
         email, 
         created_at, 
         updated_at, 
         role_id
       FROM public.users
-      WHERE username = $1
+      WHERE name = $1
     `;
 
     try {
-      const result = await pool.pool.query(query, [username]);
+      const result = await pool.pool.query(query, [name]);
       return result.rows[0];
     } catch (error) {
       throw new Error(`Database query failed: ${error}`);

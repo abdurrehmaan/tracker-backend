@@ -66,7 +66,7 @@ class DeviceModel {
     di.device_type,
     di.created_at AS device_created_at,
     di.updated_at AS device_updated_at,
-    u.username,
+    u.name,
     u.email,
     u.role_id,
     u.created_at AS user_created_at,
@@ -182,6 +182,24 @@ LIMIT $1 OFFSET $2
       }
     }
   }
+
+  // delete device by device_id
+  static async deleteDeviceById(device_id: string): Promise<void> {
+    const query = "DELETE FROM public.device_inventory WHERE device_id = $1";
+    try {
+      await pool.pool.query(query, [device_id]);
+    } catch (error) {
+      if (error instanceof Error) {
+        throw new Error(`Database query failed: ${error.message}`);
+      } else {
+        throw new Error("Database query failed: Unknown error");
+      }
+    }
+  }
+
 }
+
+
+
 
 export default DeviceModel;

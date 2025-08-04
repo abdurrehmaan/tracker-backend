@@ -60,14 +60,14 @@ class DevicesController {
         }
       }
 
-      if (device_type === "pmd") {
-        if (!device_code.startsWith("PMD-")) {
-          return res.status(400).json({
-            success: false,
-            message: "Invalid device code format. It should be like PMD-0001",
-          });
-        }
-      }
+      // if (device_type === "pmd") {
+      //   if (!device_code.startsWith("PMD-")) {
+      //     return res.status(400).json({
+      //       success: false,
+      //       message: "Invalid device code format. It should be like PMD-0001",
+      //     });
+      //   }
+      // }
 
       const isValidUUID = (id: string) =>
         /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/.test(
@@ -155,6 +155,22 @@ class DevicesController {
           currentPage: page,
           pageSize: limit,
         },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async UpdateDevice(req: Request, res: Response, next: NextFunction) { 
+    try {
+      const id = req.params.id;
+      const device = req.body;
+      console.log("Updating device with ID:", id, "Data:", device);
+      const updatedDevice = await DeviceModel.updateDeviceInfo(id, device);
+      res.status(200).json({
+        success: true,
+        message: "Device updated successfully",
+        data: updatedDevice,
       });
     } catch (error) {
       next(error);
