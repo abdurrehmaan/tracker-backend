@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import dotenv from "dotenv";
 import DeviceModel from "../models/device-model";
+import User from "../models/user-model";
 dotenv.config();
 
 // Extend Express Request interface to include 'user'
@@ -85,6 +86,15 @@ class DevicesController {
         return res.status(400).json({
           success: false,
           message: "Invalid tracker_model (must be a valid UUID)",
+        });
+      }
+
+      // Check if user exists
+      const userExists = await User.getById(user_id);
+      if (!userExists) {
+        return res.status(404).json({
+          success: false,
+          message: "User not found with the provided user_id",
         });
       }
 
