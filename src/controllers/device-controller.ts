@@ -186,7 +186,23 @@ class DevicesController {
       next(error);
     }
   }
+
+  //Delete device
+  static async deleteDeviceById(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const id = req.params.id;
+      console.log("Deleting device with ID:", id);
+      await DeviceModel.deleteDeviceById(id);
+      res.status(200).json({
+        success: true,
+        message: "Device deleted successfully",
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
 }
+
 
 // module.exports = DevicesController;
 export default DevicesController;

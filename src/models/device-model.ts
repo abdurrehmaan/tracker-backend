@@ -65,6 +65,7 @@ class DeviceModel {
     di.device_id,
     di.device_type,
     di.device_code,
+    di.purchase_date,
     di.created_at AS device_created_at,
     di.updated_at AS device_updated_at,
     u.name,
@@ -170,10 +171,25 @@ LIMIT $1 OFFSET $2
   }
 
   // update  device info
-  static async updateDeviceInfo(device_id: string, data: any): Promise<any> {
-    const query = "UPDATE public.device_inventory SET $1 WHERE device_id = $2";
+  static async updateDeviceInfo(id: string, data: any): Promise<any> {
+    // Build dynamic SET clause
+    const fields = Object.keys(data);
+    const values = Object.values(data);
+    
+    if (fields.length === 0) {
+      throw new Error("No fields to update");
+    }
+    
+    const setClause = fields.map((field, index) => `${field} = $${index + 1}`).join(', ');
+    const query = `UPDATE public.device_inventory SET ${setClause} WHERE id = $${fields.length + 1} RETURNING *`;
+    
     try {
-      const result = await pool.pool.query(query, [data, device_id]);
+      const result = await pool.pool.query(query, [...values, id]);
+      
+      if (result.rowCount === 0) {
+        throw new Error(`No device found with id: ${id}`);
+      }
+      
       return result.rows[0];
     } catch (error) {
       if (error instanceof Error) {
@@ -184,11 +200,24 @@ LIMIT $1 OFFSET $2
     }
   }
 
-  // delete device by device_id
-  static async deleteDeviceById(device_id: string): Promise<void> {
-    const query = "DELETE FROM public.device_inventory WHERE device_id = $1";
+  // delete device by id
+  static async deleteDeviceById(id: string): Promise<void> {
+    console.log("DeleteDeviceById Debug:");
+    console.log("ID to delete:", id);
+    
+    const query = "DELETE FROM public.device_inventory WHERE id = $1";
+    console.log("Delete SQL Query:", query);
+    console.log("Query Parameters:", [id]);
+    
     try {
-      await pool.pool.query(query, [device_id]);
+      const result = await pool.pool.query(query, [id]);
+      console.log("Delete result rowCount:", result.rowCount);
+      
+      if (result.rowCount === 0) {
+        throw new Error(`No device found with id: ${id}`);
+      }
+      
+      console.log("Device deleted successfully");
     } catch (error) {
       if (error instanceof Error) {
         throw new Error(`Database query failed: ${error.message}`);
