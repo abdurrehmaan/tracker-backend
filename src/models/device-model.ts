@@ -64,6 +64,7 @@ class DeviceModel {
     di.iradium_imei,
     di.device_id,
     di.device_type,
+    di.device_code,
     di.created_at AS device_created_at,
     di.updated_at AS device_updated_at,
     u.name,
