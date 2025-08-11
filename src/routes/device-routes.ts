@@ -6,6 +6,7 @@ const DeviceRouter = express.Router();
 DeviceRouter.post("/add-device", DevicesController.addDevice);
 
 DeviceRouter.get("/get-devices", DevicesController.getAllDevices);
+DeviceRouter.get("/search-devices", DevicesController.searchDevices);
 DeviceRouter.put("/edit-device/:id", DevicesController.UpdateDevice);
 DeviceRouter.delete("/delete-device/:id", DevicesController.deleteDeviceById);
 DeviceRouter.get("/get-all-pmd-devices", DevicesController.getAllPMDDevices);

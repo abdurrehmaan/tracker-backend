@@ -380,6 +380,92 @@ LIMIT $1 OFFSET $2
       }
     }
   }
+
+  // Search devices by IMEI, device_id, or partial matches
+  static async searchDevices(
+    searchTerm: string,
+    limit: number = 10,
+    offset: number = 0
+  ): Promise<any[]> {
+    const searchPattern = `%${searchTerm}%`;
+    const query = `
+     SELECT 
+    di.id AS device_inventory_id,
+    di.imei,
+    di.iradium_imei,
+    di.device_id,
+    di.device_type,
+    di.device_code,
+    di.purchase_date,
+    di.created_at AS device_created_at,
+    di.updated_at AS device_updated_at,
+    u.name,
+    u.email,
+    u.role_id,
+    u.created_at AS user_created_at,
+    tmd.tracker_name,
+    tmd.created_at AS tracker_created_at
+FROM public.device_inventory di
+LEFT JOIN public.users u ON di.user_id = u.id
+LEFT JOIN public.tracker_model_details tmd ON di.tracker_model = tmd.id
+WHERE di.imei ILIKE $1 
+   OR di.device_id ILIKE $1 
+   OR di.iradium_imei ILIKE $1
+   OR di.device_code ILIKE $1
+ORDER BY 
+  -- Prioritize exact matches first, then prefix matches, then partial matches
+  CASE 
+    WHEN di.imei = $4 OR di.device_id = $4 OR di.iradium_imei = $4 OR di.device_code = $4 THEN 1
+    WHEN di.imei ILIKE $5 OR di.device_id ILIKE $5 OR di.iradium_imei ILIKE $5 OR di.device_code ILIKE $5 THEN 2
+    ELSE 3
+  END,
+  di.created_at DESC
+LIMIT $2 OFFSET $3
+    `;
+
+    const exactTerm = searchTerm;
+    const startPattern = `${searchTerm}%`;
+
+    try {
+      const result = await pool.pool.query(query, [
+        searchPattern, 
+        limit, 
+        offset, 
+        exactTerm, 
+        startPattern
+      ]);
+      return result.rows;
+    } catch (error) {
+      if (error instanceof Error) {
+        throw new Error(`Database query failed: ${error.message}`);
+      } else {
+        throw new Error("Database query failed: Unknown error");
+      }
+    }
+  }
+
+  // Count search results for pagination
+  static async countSearchResults(searchTerm: string): Promise<number> {
+    const searchPattern = `%${searchTerm}%`;
+    const query = `
+      SELECT COUNT(*) 
+      FROM public.device_inventory 
+      WHERE imei ILIKE $1 
+         OR device_id ILIKE $1 
+         OR iradium_imei ILIKE $1
+         OR device_code ILIKE $1
+    `;
+    try {
+      const result = await pool.pool.query(query, [searchPattern]);
+      return parseInt(result.rows[0].count, 10);
+    } catch (error) {
+      if (error instanceof Error) {
+        throw new Error(`Database query failed: ${error.message}`);
+      } else {
+        throw new Error("Database query failed: Unknown error");
+      }
+    }
+  }
 }
 
 export default DeviceModel;

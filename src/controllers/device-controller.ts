@@ -267,6 +267,59 @@ class DevicesController {
       next(error);
     }
   }
+
+  // Search devices by IMEI, device_id, or partial matches (optimized for debouncing)
+  static async searchDevices(req: Request, res: Response, next: NextFunction) {
+    try {
+      const searchTerm = req.query.search as string;
+      
+      if (!searchTerm || searchTerm.trim().length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Search term is required",
+        });
+      }
+
+      // Minimum search length to reduce unnecessary queries
+      if (searchTerm.trim().length < 2) {
+        return res.status(400).json({
+          success: false,
+          message: "Search term must be at least 2 characters",
+        });
+      }
+
+      // Read query params with defaults
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = parseInt(req.query.limit as string) || 20;
+      const offset = (page - 1) * limit;
+
+      console.log(`Search request for: "${searchTerm.trim()}" at ${new Date().toISOString()}`);
+
+      // Fetch total count of search results (for pagination metadata)
+      const totalDevices = await DeviceModel.countSearchResults(searchTerm.trim());
+
+      // Fetch devices matching the search term for the current page
+      const devices = await DeviceModel.searchDevices(searchTerm.trim(), limit, offset);
+
+      // Calculate total pages
+      const totalPages = Math.ceil(totalDevices / limit);
+
+      res.status(200).json({
+        success: true,
+        message: `Found ${totalDevices} devices matching "${searchTerm}"`,
+        data: devices,
+        searchTerm: searchTerm.trim(),
+        pagination: {
+          totalDevices,
+          totalPages,
+          currentPage: page,
+          pageSize: limit,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
 }
 
 
