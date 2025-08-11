@@ -175,21 +175,25 @@ LIMIT $1 OFFSET $2
     // Build dynamic SET clause
     const fields = Object.keys(data);
     const values = Object.values(data);
-    
+
     if (fields.length === 0) {
       throw new Error("No fields to update");
     }
-    
-    const setClause = fields.map((field, index) => `${field} = $${index + 1}`).join(', ');
-    const query = `UPDATE public.device_inventory SET ${setClause} WHERE id = $${fields.length + 1} RETURNING *`;
-    
+
+    const setClause = fields
+      .map((field, index) => `${field} = $${index + 1}`)
+      .join(", ");
+    const query = `UPDATE public.device_inventory SET ${setClause} WHERE id = $${
+      fields.length + 1
+    } RETURNING *`;
+
     try {
       const result = await pool.pool.query(query, [...values, id]);
-      
+
       if (result.rowCount === 0) {
         throw new Error(`No device found with id: ${id}`);
       }
-      
+
       return result.rows[0];
     } catch (error) {
       if (error instanceof Error) {
@@ -204,19 +208,19 @@ LIMIT $1 OFFSET $2
   static async deleteDeviceById(id: string): Promise<void> {
     console.log("DeleteDeviceById Debug:");
     console.log("ID to delete:", id);
-    
+
     const query = "DELETE FROM public.device_inventory WHERE id = $1";
     console.log("Delete SQL Query:", query);
     console.log("Query Parameters:", [id]);
-    
+
     try {
       const result = await pool.pool.query(query, [id]);
       console.log("Delete result rowCount:", result.rowCount);
-      
+
       if (result.rowCount === 0) {
         throw new Error(`No device found with id: ${id}`);
       }
-      
+
       console.log("Device deleted successfully");
     } catch (error) {
       if (error instanceof Error) {
@@ -227,9 +231,155 @@ LIMIT $1 OFFSET $2
     }
   }
 
+  // Get all PMD devices
+  static async getAllPMDDevices(): Promise<any[]> {
+    console.log("GetAllPMDDevices Debug:");
+    const query =
+      "SELECT * FROM public.device_inventory WHERE device_type = 'PMD'";
+    try {
+      const result = await pool.pool.query(query);
+      console.log("GetAllPMDDevices Query Result:", result.rows);
+      return result.rows;
+    } catch (error) {
+      if (error instanceof Error) {
+        throw new Error(`Database query failed: ${error.message}`);
+      } else {
+        throw new Error("Database query failed: Unknown error");
+      }
+    }
+  }
+
+  // Get all devices CSD Devices
+  static async getAllCSDDevices(): Promise<any[]> {
+    console.log("GetAllCSDDevices Debug:");
+    const query =
+      "SELECT * FROM public.device_inventory WHERE device_type = 'CSD'";
+    try {
+      const result = await pool.pool.query(query);
+      console.log("GetAllCSDDevices Query Result:", result.rows);
+      return result.rows;
+    } catch (error) {
+      if (error instanceof Error) {
+        throw new Error(`Database query failed: ${error.message}`);
+      } else {
+        throw new Error("Database query failed: Unknown error");
+      }
+    }
+  }
+
+  // Count PMD devices for pagination
+  static async countPMDDevices(): Promise<number> {
+    const query = "SELECT COUNT(*) FROM public.device_inventory WHERE device_type = 'PMD'";
+    try {
+      const result = await pool.pool.query(query);
+      return parseInt(result.rows[0].count, 10);
+    } catch (error) {
+      if (error instanceof Error) {
+        throw new Error(`Database query failed: ${error.message}`);
+      } else {
+        throw new Error("Database query failed: Unknown error");
+      }
+    }
+  }
+
+  // Count CSD devices for pagination
+  static async countCSDDevices(): Promise<number> {
+    const query = "SELECT COUNT(*) FROM public.device_inventory WHERE device_type = 'CSD'";
+    try {
+      const result = await pool.pool.query(query);
+      return parseInt(result.rows[0].count, 10);
+    } catch (error) {
+      if (error instanceof Error) {
+        throw new Error(`Database query failed: ${error.message}`);
+      } else {
+        throw new Error("Database query failed: Unknown error");
+      }
+    }
+  }
+
+  // Get paginated PMD devices with joins (limit & offset)
+  static async getPMDDevicesWithPagination(
+    limit: number,
+    offset: number
+  ): Promise<any[]> {
+    const query = `
+     SELECT 
+    di.id AS device_inventory_id,
+    di.imei,
+    di.iradium_imei,
+    di.device_id,
+    di.device_type,
+    di.device_code,
+    di.purchase_date,
+    di.created_at AS device_created_at,
+    di.updated_at AS device_updated_at,
+    u.name,
+    u.email,
+    u.role_id,
+    u.created_at AS user_created_at,
+    tmd.tracker_name,
+    tmd.created_at AS tracker_created_at
+FROM public.device_inventory di
+LEFT JOIN public.users u ON di.user_id = u.id
+LEFT JOIN public.tracker_model_details tmd ON di.tracker_model = tmd.id
+WHERE di.device_type = 'PMD'
+ORDER BY di.created_at DESC
+LIMIT $1 OFFSET $2
+    `;
+
+    try {
+      const result = await pool.pool.query(query, [limit, offset]);
+      return result.rows;
+    } catch (error) {
+      if (error instanceof Error) {
+        throw new Error(`Database query failed: ${error.message}`);
+      } else {
+        throw new Error("Database query failed: Unknown error");
+      }
+    }
+  }
+
+  // Get paginated CSD devices with joins (limit & offset)
+  static async getCSDDevicesWithPagination(
+    limit: number,
+    offset: number
+  ): Promise<any[]> {
+    const query = `
+     SELECT 
+    di.id AS device_inventory_id,
+    di.imei,
+    di.iradium_imei,
+    di.device_id,
+    di.device_type,
+    di.device_code,
+    di.purchase_date,
+    di.created_at AS device_created_at,
+    di.updated_at AS device_updated_at,
+    u.name,
+    u.email,
+    u.role_id,
+    u.created_at AS user_created_at,
+    tmd.tracker_name,
+    tmd.created_at AS tracker_created_at
+FROM public.device_inventory di
+LEFT JOIN public.users u ON di.user_id = u.id
+LEFT JOIN public.tracker_model_details tmd ON di.tracker_model = tmd.id
+WHERE di.device_type = 'CSD'
+ORDER BY di.created_at DESC
+LIMIT $1 OFFSET $2
+    `;
+
+    try {
+      const result = await pool.pool.query(query, [limit, offset]);
+      return result.rows;
+    } catch (error) {
+      if (error instanceof Error) {
+        throw new Error(`Database query failed: ${error.message}`);
+      } else {
+        throw new Error("Database query failed: Unknown error");
+      }
+    }
+  }
 }
-
-
-
 
 export default DeviceModel;

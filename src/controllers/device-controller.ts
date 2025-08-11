@@ -201,6 +201,72 @@ class DevicesController {
       next(error);
     }
   }
+
+
+  //GetAllPMDDevices
+  static async getAllPMDDevices(req: Request, res: Response, next: NextFunction) {
+    try {
+      // Read query params with defaults
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = parseInt(req.query.limit as string) || 10;
+      const offset = (page - 1) * limit;
+
+      // Fetch total count of PMD devices (for pagination metadata)
+      const totalDevices = await DeviceModel.countPMDDevices();
+
+      // Fetch PMD devices for the current page
+      const devices = await DeviceModel.getPMDDevicesWithPagination(limit, offset);
+
+      // Calculate total pages
+      const totalPages = Math.ceil(totalDevices / limit);
+
+      res.status(200).json({
+        success: true,
+        message: "PMD devices retrieved successfully",
+        data: devices,
+        pagination: {
+          totalDevices,
+          totalPages,
+          currentPage: page,
+          pageSize: limit,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+  //GetAllCSDDevices
+  static async getAllCSDDevices(req: Request, res: Response, next: NextFunction) {
+    try {
+      // Read query params with defaults
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = parseInt(req.query.limit as string) || 10;
+      const offset = (page - 1) * limit;
+
+      // Fetch total count of CSD devices (for pagination metadata)
+      const totalDevices = await DeviceModel.countCSDDevices();
+
+      // Fetch CSD devices for the current page
+      const devices = await DeviceModel.getCSDDevicesWithPagination(limit, offset);
+
+      // Calculate total pages
+      const totalPages = Math.ceil(totalDevices / limit);
+
+      res.status(200).json({
+        success: true,
+        message: "CSD devices retrieved successfully",
+        data: devices,
+        pagination: {
+          totalDevices,
+          totalPages,
+          currentPage: page,
+          pageSize: limit,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
 }
 
 
