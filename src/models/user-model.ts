@@ -13,7 +13,7 @@ export class User {
     const query = `
       SELECT 
         u.id,
-        u.username,
+        u.name,
         u.email,
         u.created_at,
         u.updated_at,
@@ -128,21 +128,21 @@ export class User {
     }
   }
 
-  static async getByUsername(username: string) {
+  static async getByUsername(name: string) {
     const query = `
       SELECT 
         id, 
-        username, 
+        name, 
         email, 
         created_at, 
         updated_at, 
         role_id
       FROM public.users
-      WHERE username = $1
+      WHERE name = $1
     `;
 
     try {
-      const result = await pool.pool.query(query, [username]);
+      const result = await pool.pool.query(query, [name]);
       return result.rows[0];
     } catch (error) {
       throw new Error(`Database query failed: ${error}`);
