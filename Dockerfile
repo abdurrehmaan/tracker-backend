@@ -12,6 +12,8 @@ RUN npm install
 # Copy rest of the app
 COPY . .
 
+RUN chmod +x node_modules/.bin/ts-node-dev
+
 EXPOSE 4000
 
 CMD ["npm", "run", "dev"]
