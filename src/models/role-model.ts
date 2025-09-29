@@ -1,6 +1,4 @@
-
-
-import pool  from '../config/db'; // Adjust the path as needed to where your pool is exported
+import { pool } from "../config/db"; // Adjust the path as needed to where your pool is exported
 
 class Role {
   // Get all roles
@@ -8,7 +6,7 @@ class Role {
     const query = "SELECT * FROM public.roles ORDER BY name ASC";
 
     try {
-      const result = await pool.pool.query(query);
+      const result = await pool.query(query);
       return result.rows;
     } catch (error) {
       if (error instanceof Error) {
@@ -24,7 +22,7 @@ class Role {
     const query = "SELECT * FROM public.roles WHERE id = $1";
 
     try {
-      const result = await pool.pool.query(query, [roleId]);
+      const result = await pool.query(query, [roleId]);
       return result.rows[0];
     } catch (error) {
       if (error instanceof Error) {

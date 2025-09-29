@@ -1,4 +1,4 @@
-import pool from "../config/db"; // Adjust the path as needed to where your pool is exported
+import { pool } from "../config/db"; // Adjust the path as needed to where your pool is exported
 
 interface TrackerData {
   tracker_name: string;
@@ -20,7 +20,7 @@ export class Tracker {
         `;
 
     try {
-      const result = await pool.pool.query(query);
+      const result = await pool.query(query);
       return result.rows;
     } catch (error) {
       if (error instanceof Error) {

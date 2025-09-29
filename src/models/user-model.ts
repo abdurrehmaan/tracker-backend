@@ -1,4 +1,4 @@
-import pool from "../config/db"; // Adjust the path as needed to where your pool is exported
+import { pool } from "../config/db"; // Adjust the path as needed to where your pool is exported
 
 interface UserData {
   name: string;
@@ -25,7 +25,7 @@ export class User {
     `;
 
     try {
-      const result = await pool.pool.query(query);
+      const result = await pool.query(query);
       return result.rows;
     } catch (error) {
       if (error instanceof Error) {
@@ -53,7 +53,7 @@ export class User {
     `;
 
     try {
-      const result = await pool.pool.query(query, [userId]);
+      const result = await pool.query(query, [userId]);
       return result.rows[0];
     } catch (error) {
       throw new Error(`Database query failed: ${error}`);
@@ -71,7 +71,7 @@ export class User {
     `;
 
     try {
-      const result = await pool.pool.query(query, [
+      const result = await pool.query(query, [
         name,
         email,
         password_hash,
@@ -100,7 +100,7 @@ export class User {
     `;
 
     try {
-      const result = await pool.pool.query(query, [email]);
+      const result = await pool.query(query, [email]);
       return result.rows[0];
     } catch (error) {
       throw new Error(`Database query failed: ${error}`);
@@ -121,7 +121,7 @@ export class User {
     `;
 
     try {
-      const result = await pool.pool.query(query, [userId]);
+      const result = await pool.query(query, [userId]);
       return result.rows[0];
     } catch (error) {
       throw new Error(`Database query failed: ${error}`);
@@ -142,7 +142,7 @@ export class User {
     `;
 
     try {
-      const result = await pool.pool.query(query, [name]);
+      const result = await pool.query(query, [name]);
       return result.rows[0];
     } catch (error) {
       throw new Error(`Database query failed: ${error}`);

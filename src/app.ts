@@ -8,6 +8,8 @@ import UserRouter from "./routes/user-routes";
 import AuthRouter from "./routes/auth-routes";
 import DeviceRouter from "./routes/device-routes";
 import TrackerRouter from "./routes/tracker-module-routes";
+import PlatformRouter from "./routes/platform-routes";
+import TRMRouters from "./routes/trm-routes";
 
 dotenv.config();
 
@@ -18,8 +20,6 @@ app.use(express.json());
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-
-  
 
 // Middleware to handle CORS
 app.use((req, res, next) => {
@@ -34,6 +34,9 @@ app.use("/api", UserRouter);
 app.use("/api/auth", AuthRouter);
 app.use("/api/devices", DeviceRouter);
 app.use("/api/tracker", TrackerRouter);
+app.use("/api/platform", PlatformRouter);
+app.use("/api/psw", TRMRouters);
+
 
 // Health check endpoint
 app.get("/health", (req, res) => {

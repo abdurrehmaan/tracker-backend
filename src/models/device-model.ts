@@ -1,4 +1,4 @@
-import pool from "../config/db"; // Keep the same import
+import { pool } from "../config/db"; // Keep the same import
 
 class DeviceModel {
   static async createDeviceInfo(
@@ -17,7 +17,7 @@ class DeviceModel {
       RETURNING *`;
 
     try {
-      const result = await pool.pool.query(query, [
+      const result = await pool.query(query, [
         imei,
         iradium_imei,
         device_id,
@@ -41,7 +41,7 @@ class DeviceModel {
   static async countDevices(): Promise<number> {
     const query = "SELECT COUNT(*) FROM public.device_inventory";
     try {
-      const result = await pool.pool.query(query);
+      const result = await pool.query(query);
       return parseInt(result.rows[0].count, 10);
     } catch (error) {
       if (error instanceof Error) {
@@ -82,7 +82,7 @@ LIMIT $1 OFFSET $2
     `;
 
     try {
-      const result = await pool.pool.query(query, [limit, offset]);
+      const result = await pool.query(query, [limit, offset]);
       return result.rows;
     } catch (error) {
       if (error instanceof Error) {
@@ -116,7 +116,7 @@ LIMIT $1 OFFSET $2
       LIMIT 100`;
 
     try {
-      const result = await pool.pool.query(query);
+      const result = await pool.query(query);
       return result.rows;
     } catch (error) {
       if (error instanceof Error) {
@@ -131,7 +131,7 @@ LIMIT $1 OFFSET $2
     const query =
       "SELECT * FROM public.device_inventory WHERE iradium_imei = $1";
     try {
-      const result = await pool.pool.query(query, [imei]);
+      const result = await pool.query(query, [imei]);
       return result.rows[0];
     } catch (error) {
       if (error instanceof Error) {
@@ -145,7 +145,7 @@ LIMIT $1 OFFSET $2
   static async getByImei(imei: string): Promise<any> {
     const query = "SELECT * FROM public.device_inventory WHERE imei = $1";
     try {
-      const result = await pool.pool.query(query, [imei]);
+      const result = await pool.query(query, [imei]);
       return result.rows[0];
     } catch (error) {
       if (error instanceof Error) {
@@ -159,7 +159,7 @@ LIMIT $1 OFFSET $2
   static async getByDeviceId(device_id: string): Promise<any> {
     const query = "SELECT * FROM public.device_inventory WHERE device_id = $1";
     try {
-      const result = await pool.pool.query(query, [device_id]);
+      const result = await pool.query(query, [device_id]);
       return result.rows[0];
     } catch (error) {
       if (error instanceof Error) {
@@ -188,7 +188,7 @@ LIMIT $1 OFFSET $2
     } RETURNING *`;
 
     try {
-      const result = await pool.pool.query(query, [...values, id]);
+      const result = await pool.query(query, [...values, id]);
 
       if (result.rowCount === 0) {
         throw new Error(`No device found with id: ${id}`);
@@ -214,7 +214,7 @@ LIMIT $1 OFFSET $2
     console.log("Query Parameters:", [id]);
 
     try {
-      const result = await pool.pool.query(query, [id]);
+      const result = await pool.query(query, [id]);
       console.log("Delete result rowCount:", result.rowCount);
 
       if (result.rowCount === 0) {
@@ -237,7 +237,7 @@ LIMIT $1 OFFSET $2
     const query =
       "SELECT * FROM public.device_inventory WHERE device_type = 'PMD'";
     try {
-      const result = await pool.pool.query(query);
+      const result = await pool.query(query);
       console.log("GetAllPMDDevices Query Result:", result.rows);
       return result.rows;
     } catch (error) {
@@ -255,7 +255,7 @@ LIMIT $1 OFFSET $2
     const query =
       "SELECT * FROM public.device_inventory WHERE device_type = 'CSD'";
     try {
-      const result = await pool.pool.query(query);
+      const result = await pool.query(query);
       console.log("GetAllCSDDevices Query Result:", result.rows);
       return result.rows;
     } catch (error) {
@@ -269,9 +269,10 @@ LIMIT $1 OFFSET $2
 
   // Count PMD devices for pagination
   static async countPMDDevices(): Promise<number> {
-    const query = "SELECT COUNT(*) FROM public.device_inventory WHERE device_type = 'PMD'";
+    const query =
+      "SELECT COUNT(*) FROM public.device_inventory WHERE device_type = 'PMD'";
     try {
-      const result = await pool.pool.query(query);
+      const result = await pool.query(query);
       return parseInt(result.rows[0].count, 10);
     } catch (error) {
       if (error instanceof Error) {
@@ -284,9 +285,10 @@ LIMIT $1 OFFSET $2
 
   // Count CSD devices for pagination
   static async countCSDDevices(): Promise<number> {
-    const query = "SELECT COUNT(*) FROM public.device_inventory WHERE device_type = 'CSD'";
+    const query =
+      "SELECT COUNT(*) FROM public.device_inventory WHERE device_type = 'CSD'";
     try {
-      const result = await pool.pool.query(query);
+      const result = await pool.query(query);
       return parseInt(result.rows[0].count, 10);
     } catch (error) {
       if (error instanceof Error) {
@@ -328,7 +330,7 @@ LIMIT $1 OFFSET $2
     `;
 
     try {
-      const result = await pool.pool.query(query, [limit, offset]);
+      const result = await pool.query(query, [limit, offset]);
       return result.rows;
     } catch (error) {
       if (error instanceof Error) {
@@ -370,7 +372,7 @@ LIMIT $1 OFFSET $2
     `;
 
     try {
-      const result = await pool.pool.query(query, [limit, offset]);
+      const result = await pool.query(query, [limit, offset]);
       return result.rows;
     } catch (error) {
       if (error instanceof Error) {
@@ -427,12 +429,12 @@ LIMIT $2 OFFSET $3
     const startPattern = `${searchTerm}%`;
 
     try {
-      const result = await pool.pool.query(query, [
-        searchPattern, 
-        limit, 
-        offset, 
-        exactTerm, 
-        startPattern
+      const result = await pool.query(query, [
+        searchPattern,
+        limit,
+        offset,
+        exactTerm,
+        startPattern,
       ]);
       return result.rows;
     } catch (error) {
@@ -456,7 +458,7 @@ LIMIT $2 OFFSET $3
          OR device_code ILIKE $1
     `;
     try {
-      const result = await pool.pool.query(query, [searchPattern]);
+      const result = await pool.query(query, [searchPattern]);
       return parseInt(result.rows[0].count, 10);
     } catch (error) {
       if (error instanceof Error) {
