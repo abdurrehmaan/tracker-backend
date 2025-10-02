@@ -98,6 +98,82 @@ class TripController {
     }
   }
 
+  // Function to check/create vehicle
+  static async checkOrCreateVehicle(vehicleNumber: string, carrierId: number): Promise<number> {
+    const client = await pool.connect();
+    try {
+      // Check if vehicle exists by registration number and carrier_id
+      const existingVehicle = await client.query(
+        'SELECT id FROM vehicles WHERE LOWER(registration_number) = LOWER($1) AND carrier_id = $2 LIMIT 1',
+        [vehicleNumber, carrierId]
+      );
+
+      if (existingVehicle.rows.length > 0) {
+        console.log(`Vehicle found: ${vehicleNumber} with ID: ${existingVehicle.rows[0].id}`);
+        return existingVehicle.rows[0].id;
+      }
+
+      // Create new vehicle if doesn't exist
+      const newVehicle = await client.query(
+        `INSERT INTO vehicles (registration_number, make, model, year, color, chassis_number, engine_number, carrier_id) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+        [
+          vehicleNumber,   // registration_number
+          'N/A',          // make
+          'N/A',          // model
+          2020,           // year (default year)
+          'N/A',          // color
+          'N/A',          // chassis_number
+          'N/A',          // engine_number
+          carrierId       // carrier_id
+        ]
+      );
+
+      console.log(`Created new vehicle: ${vehicleNumber} with ID: ${newVehicle.rows[0].id}`);
+      return newVehicle.rows[0].id;
+    } catch (error) {
+      console.error('Error in checkOrCreateVehicle:', error);
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  // Main function to handle carrier and vehicle creation
+  static async processCarrierAndVehicle(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { vehicleNumber, bondedCarrierName } = req.body;
+
+      // Validate required fields
+      if (!vehicleNumber || !bondedCarrierName) {
+        return res.status(400).json({
+          success: false,
+          message: 'Vehicle number and bonded carrier name are required'
+        });
+      }
+
+      // Step 1: Check/Create Bonded Carrier
+      const carrierId = await TripController.checkOrCreateCarrier(bondedCarrierName);
+
+      // Step 2: Check/Create Vehicle
+      const vehicleId = await TripController.checkOrCreateVehicle(vehicleNumber, carrierId);
+
+      res.status(200).json({
+        success: true,
+        message: 'Carrier and vehicle processed successfully',
+        data: {
+          carrierId,
+          vehicleId,
+          carrierName: bondedCarrierName,
+          vehicleNumber
+        }
+      });
+    } catch (error) {
+      console.error('Error in processCarrierAndVehicle:', error);
+      next(error);
+    }
+  }
+
   // Main function to handle carrier and driver creation
   static async processCarrierAndDriver(req: Request, res: Response, next: NextFunction) {
     try {
