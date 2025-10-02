@@ -20,9 +20,18 @@ const app = express();
 app.use(express.json());
 
 //ServerError handling
+const allowedOrigins = [
+  'http://localhost:3000',
+  'https://device-tracker-dashboard-eight.vercel.app'
+];
+
+// Add environment variable if it exists
+if (process.env.CMS_FRONTEND_URL) {
+  allowedOrigins.push(process.env.CMS_FRONTEND_URL);
+}
+
 const corsOptions = {
-  origin: `${process.env.CMS_fRONTEND_URL
-  }`, // Frontend URL
+  origin: allowedOrigins,
   credentials: true, // Allow credentials
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],

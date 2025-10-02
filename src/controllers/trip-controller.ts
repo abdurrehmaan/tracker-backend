@@ -98,6 +98,82 @@ class TripController {
     }
   }
 
+  // Function to check vehicle in pmd_devices table
+  static async checkVehicleInPmdDevices(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { vehicleNumber } = req.body;
+
+      // Validate required field
+      if (!vehicleNumber) {
+        return res.status(400).json({
+          success: false,
+          message: 'Vehicle number is required'
+        });
+      }
+
+      const client = await pool.connect();
+      try {
+        // Step 1: First find the vehicle in vehicles table to get vehicle_id
+        const vehicleResult = await client.query(
+          'SELECT id, registration_number FROM vehicles WHERE LOWER(registration_number) = LOWER($1) LIMIT 1',
+          [vehicleNumber]
+        );
+
+        if (vehicleResult.rows.length === 0) {
+          return res.status(404).json({
+            success: false,
+            message: 'Vehicle not found in vehicles table',
+            data: {
+              vehicleNumber,
+              exists: false,
+              step: 'vehicle_lookup'
+            }
+          });
+        }
+
+        const vehicle = vehicleResult.rows[0];
+        const vehicleId = vehicle.id;
+
+        // Step 2: Check if vehicle_id exists in pmd_devices table
+        const deviceResult = await client.query(
+          'SELECT vehicle_id, configuration_date FROM pmd_devices WHERE vehicle_id = $1 LIMIT 1',
+          [vehicleId]
+        );
+
+        if (deviceResult.rows.length > 0) {
+          const device = deviceResult.rows[0];
+          return res.status(200).json({
+            success: true,
+            message: 'Vehicle found in both vehicles and PMD devices tables',
+            data: {
+              vehicleNumber: vehicle.registration_number,
+              vehicleId: vehicleId,
+              configurationDate: device.configuration_date,
+              exists: true,
+              pmdDeviceExists: true
+            }
+          });
+        } else {
+          return res.status(200).json({
+            success: true,
+            message: 'Vehicle exists in vehicles table but not configured in PMD devices',
+            data: {
+              vehicleNumber: vehicle.registration_number,
+              vehicleId: vehicleId,
+              exists: true,
+              pmdDeviceExists: false
+            }
+          });
+        }
+      } finally {
+        client.release();
+      }
+    } catch (error) {
+      console.error('Error in checkVehicleInPmdDevices:', error);
+      next(error);
+    }
+  }
+
   // Function to check/create vehicle
   static async checkOrCreateVehicle(vehicleNumber: string, carrierId: number): Promise<number> {
     const client = await pool.connect();

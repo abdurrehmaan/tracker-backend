@@ -8,7 +8,8 @@ const TripRoutes = Router();
 TripRoutes.post("/process-carrier-driver", TripController.processCarrierAndDriver);
 // Route to validate and create vehicle/carrier
 TripRoutes.post("/process-carrier-vehicle", TripController.processCarrierAndVehicle);
-TripRoutes.get("/validate-driver", TripController.driverexitandcreate);
+// Route to check vehicle in PMD devices
+TripRoutes.post("/check-vehicle-pmd", TripController.checkVehicleInPmdDevices);
 
 TripRoutes.get("/ping", (req, res) => res.json({ ok: true }));
 
