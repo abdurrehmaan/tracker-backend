@@ -10,6 +10,9 @@ import DeviceRouter from "./routes/device-routes";
 import TrackerRouter from "./routes/tracker-module-routes";
 import PlatformRouter from "./routes/platform-routes";
 import TRMRouters from "./routes/trm-routes";
+import TripRoutes from "./routes/trip-routes";
+
+
 
 dotenv.config();
 
@@ -17,17 +20,17 @@ const app = express();
 app.use(express.json());
 
 //ServerError handling
-app.use(cors());
+const corsOptions = {
+  origin: `${process.env.CMS_fRONTEND_URL
+  }`, // Frontend URL
+  credentials: true, // Allow credentials
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+};
+
+app.use(cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-
-// Middleware to handle CORS
-app.use((req, res, next) => {
-  res.header("Access-Control-Allow-Origin", "*");
-  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-  res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
-  next();
-});
 
 // Routes
 app.use("/api", UserRouter);
@@ -36,6 +39,7 @@ app.use("/api/devices", DeviceRouter);
 app.use("/api/tracker", TrackerRouter);
 app.use("/api/platform", PlatformRouter);
 app.use("/api/psw", TRMRouters);
+app.use("/api/trip", TripRoutes);
 
 
 // Health check endpoint

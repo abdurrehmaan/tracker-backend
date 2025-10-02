@@ -10,11 +10,30 @@ import TrmFileModel from "../models/trm-model";
 dotenv.config();
 
 interface TRMRecordMapped {
+  Total_Records?: number;
+  Record_Sequence?: number;
   VIR_Number?: string;
   BL_Number?: string;
   GD_Number?: string;
-  Total_Records?: number;
-  Record_Sequence?: number;
+  Declaration_Type?: string;
+  Trader_NTN?: string;
+  Trader_Name?: string;
+  Agent_Chal_No?: string;
+  Agent_Name?: string;
+  Container_Number?: string;
+  Bonded_Carrier_NTN?: string;
+  Bonded_Carrier_Name?: string;
+  Vehicle_Number?: string;
+  Driver_Name?: string;
+  Driver_Contact_Number?: string;
+  Port_of_Origin?: string;
+  Port_Of_Origin_Name?: string;
+  Port_of_Destination?: string;
+  Port_of_Destination_Name?: string;
+  Check_Post?: string;
+  Cargo_Type?: string;
+  Performed?: string;
+  Operation_Type?: string;
   [key: string]: any;
 }
 
@@ -238,11 +257,16 @@ async function buildDataset(): Promise<DatasetRow[]> {
 
       // After processing each file, insert the data into DB and send acknowledgment
       const deduped = dedupeDataset(dataset);
-      await saveDatasetToDb(deduped);
+      const insertedIds = await saveDatasetToDb(deduped);
 
       // Create the ACK XML file and upload it to SFTP after processing each file
       const ackFilePath = saveAckToFile(f.name); // Save ACK file for the current TRM file
       await uploadAckToSftp(ackFilePath); // Upload ACK file to SFTP
+
+      // Insert acknowledgment records for each inserted TRM record
+      for (const trmId of insertedIds) {
+        await insertAckRecord(trmId, f.name);
+      }
 
       // Move processed file to Logs folder
       await moveToLogs(sftp, f.name);
@@ -258,6 +282,24 @@ async function buildDataset(): Promise<DatasetRow[]> {
     } catch (err) {
       console.error("Failed to close SFTP connection:", err);
     }
+  }
+}
+
+// Function to insert acknowledgment record into trm_ack table
+async function insertAckRecord(trmId: number, filename: string): Promise<void> {
+  const client = await pool.connect();
+  try {
+    const ackFilename = `ACK_${filename}`;
+    await client.query(
+      `INSERT INTO trm_ack (trm_id, status) VALUES ($1, $2)`,
+      [trmId, 'OK']
+    );
+    console.log(`Inserted ACK record for TRM ID: ${trmId}`);
+  } catch (error) {
+    console.error("Error inserting ACK record:", error);
+    throw error;
+  } finally {
+    client.release();
   }
 }
 
@@ -290,8 +332,10 @@ async function uploadAckToSftp(ackFilePath: string): Promise<void> {
 }
 
 // Function to save dataset to DB
-async function saveDatasetToDb(dataset: DatasetRow[]): Promise<void> {
+async function saveDatasetToDb(dataset: DatasetRow[]): Promise<number[]> {
   const client = await pool.connect();
+  const insertedIds: number[] = [];
+  
   try {
     console.log("Inserting data into the database...");
     for (const row of dataset) {
@@ -312,12 +356,19 @@ async function saveDatasetToDb(dataset: DatasetRow[]): Promise<void> {
         }
 
         console.log("Inserting into DB:", row);
-        await client.query(
-          `INSERT INTO trm_files (date, iso, filename, json_data) VALUES ($1, $2, $3, $4)`,
+        const insertResult = await client.query(
+          `INSERT INTO trm_files (date, iso, filename, json_data) VALUES ($1, $2, $3, $4) RETURNING id`,
           [row.date, row.iso, row.filename, JSON.stringify(row.json)]
         );
+        
+        const trmFileId = insertResult.rows[0].id;
+        console.log(`Inserted TRM file with ID: ${trmFileId}`);
+        
+        insertedIds.push(trmFileId);
       }
     }
+    
+    return insertedIds;
   } catch (error) {
     console.error("Error saving dataset to DB:", error);
     throw error;
