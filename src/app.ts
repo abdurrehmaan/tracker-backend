@@ -23,8 +23,7 @@ app.use(express.json());
 const allowedOrigins = [
   'http://localhost:3000',
   'http://localhost:9000',
-  'https://tracker-backend-drab.vercel.app/api/auth/login',
-  'https://device-tracker-dashboard-eight.vercel.app'
+  'https://device-tracker-dashboard-eight.vercel.app/'
 ];
 
 // Add environment variable if it exists
