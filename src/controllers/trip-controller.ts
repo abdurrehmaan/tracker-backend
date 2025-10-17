@@ -1726,8 +1726,6 @@ class TripController {
           transformedForm.trm_data.vir_number || null,
         ];
 
-/
-
         const tripPlaceholders = tripVals
           .map((_, index) => `$${index + 1}`)
           .join(", ");
