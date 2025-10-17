@@ -5,7 +5,7 @@ import TripController from "../controllers/trip-controller";
 const TripRoutes = Router();
 
 // Route to create a new trip
-TripRoutes.post("/create-trip", TripController.createTrip);
+// TripRoutes.post("/create-trip", TripController.createTrip);
 // Route to validate and create driver/carrier
 TripRoutes.post("/process-carrier-driver", TripController.processCarrierAndDriver);
 // Route to validate and create vehicle/carrier

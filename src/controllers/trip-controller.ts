@@ -1243,779 +1243,779 @@ class TripController {
     }
   }
   // Main function to create a new trip
-  static async createTrip(req: Request, res: Response, next: NextFunction) {
-    const startTime = Date.now();
-    const requestId = `trip_${startTime}_${Math.random()
-      .toString(36)
-      .substr(2, 9)}`;
+  // static async createTrip(req: Request, res: Response, next: NextFunction) {
+  //   const startTime = Date.now();
+  //   const requestId = `trip_${startTime}_${Math.random()
+  //     .toString(36)
+  //     .substr(2, 9)}`;
 
-    try {
-      const form = req.body;
-      const transformedForm = { ...form };
+  //   try {
+  //     const form = req.body;
+  //     const transformedForm = { ...form };
       
-      // Validate required fields
-      const required = [
-        "pmd_id",
-        "csd_id",
-        "eseal_id",
-        "route_id",
-        "departure_time",
-        "expected_arrival",
-      ];
-      const missing = required.filter((field) => {
-        const value = transformedForm[field];
-        const isEmpty =
-          !value || value === "" || value === null || value === undefined;
-        if (isEmpty) {
-          console.log(`❌ Missing field: ${field} (value: ${value})`);
-        } else {
-          console.log(`✅ Field present: ${field} = ${value}`);
-        }
-        return isEmpty;
-      });
-
-      console.log(
-        `📊 Validation Summary: ${required.length - missing.length}/${
-          required.length
-        } required fields present`
-      );
-
-      if (missing.length > 0) {
-        console.log(
-          `\n🚫 VALIDATION FAILED - Missing ${missing.length} required fields:`
-        );
-        missing.forEach((field) => console.log(`   • ${field}`));
-
-        return res.status(400).json({
-          success: false,
-          message: `Missing fields: ${missing.join(", ")}`,
-          missingFields: missing,
-          receivedData: form,
-          requestId: requestId,
-        });
-      }
-
-      console.log("✅ All required fields validated successfully");
-
-        console.log("\n🔌 STEP 2: DATABASE CONNECTION");
-      console.log("=========================================");
-      const client = await pool.connect();
-      console.log("✅ Database connection established");
-
-      // Set replica identity for eseal_devices table if not already set
-      try {
-        await client.query('ALTER TABLE eseal_devices REPLICA IDENTITY FULL');
-        console.log("✅ Replica identity set for eseal_devices table");
-      } catch (error) {
-        const pgError = error as { message?: string };
-        console.log("ℹ️ Replica identity might already be set:", pgError.message || "Unknown error");
-        // Continue with the process as the table might already have replica identity set
-      }      // Variables to track for rollback
-      let assignmentId: number | null = null;
-      let tripId: number | null = null;
-      let vdaId: number | null = null;
-
-      try {
-        // Start transaction
-        console.log("\n💾 STEP 3: TRANSACTION MANAGEMENT");
-        console.log("=========================================");
-        await client.query("BEGIN");
-        console.log("✅ Database transaction started");
-
-        // VALIDATION: Check if all device IDs exist before creating assignment
-        console.log("\n🔍 STEP 4: DEVICE VALIDATION & AUTO-CONFIGURATION");
-        console.log("=========================================");
-
-        // First, let's check what tables exist
-        console.log("\n📊 STEP 4.0: DATABASE SCHEMA VERIFICATION");
-        console.log("-----------------------------------------");
-        try {
-          const tableCheck = await client.query(`
-            SELECT table_name 
-            FROM information_schema.tables 
-            WHERE table_schema = 'public' 
-            AND table_name IN ('pmd_devices', 'csd_devices', 'eseal_devices', 'device_inventory', 'routes', 'containers')
-            ORDER BY table_name
-          `);
-          const availableTables = tableCheck.rows.map((r) => r.table_name);
-          console.log("✅ Database tables verified:");
-          availableTables.forEach((table) => console.log(`   • ${table}`));
-
-          // Check table record counts for context
-          for (const table of availableTables) {
-            try {
-              const countResult = await client.query(
-                `SELECT COUNT(*) as count FROM ${table}`
-              );
-              console.log(
-                `   📈 ${table}: ${countResult.rows[0].count} records`
-              );
-            } catch (countError) {
-              console.log(`   ⚠️  ${table}: Unable to count records`);
-            }
-          }
-        } catch (error) {
-          console.log("❌ Error checking database schema:", error);
-          throw new Error(`Database schema verification failed: ${error}`);
-        }
-
-        // Check PMD device exists
-        console.log("\n🔍 STEP 4.1: PMD DEVICE VALIDATION");
-        console.log("-----------------------------------------");
-        console.log(`🎯 Target PMD ID: ${transformedForm.pmd_id}`);
-        console.log(`📊 Data Type: ${typeof transformedForm.pmd_id}`);
-
-        let pmdDeviceId = transformedForm.pmd_id;
-
-        console.log("🔍 Querying pmd_devices table...");
-        const pmdCheck = await client.query(
-          "SELECT id, imei, vehicle_id FROM pmd_devices WHERE id = $1",
-          [transformedForm.pmd_id]
-        );
-        console.log(
-          `📊 PMD devices query result: ${pmdCheck.rows.length} rows found`
-        );
-
-        if (pmdCheck.rows.length > 0) {
-          console.log("✅ PMD device found in pmd_devices table:");
-          console.log(`   • ID: ${pmdCheck.rows[0].id}`);
-          console.log(`   • IMEI: ${pmdCheck.rows[0].imei}`);
-          console.log(`   • Vehicle ID: ${pmdCheck.rows[0].vehicle_id}`);
-        }
-
-        if (pmdCheck.rows.length === 0) {
-          console.log(
-            "⚠️  PMD not found in pmd_devices table, checking device_inventory..."
-          );
-
-          // Find PMD in device_inventory
-          const pmdInventoryCheck = await client.query(
-            "SELECT * FROM device_inventory WHERE id = $1 AND LOWER(device_type) = $2",
-            [transformedForm.pmd_id, "pmd"]
-          );
-
-          console.log(
-            `📊 PMD inventory query result: ${pmdInventoryCheck.rows.length} rows found`
-          );
-
-          if (pmdInventoryCheck.rows.length === 0) {
-            console.log("❌ PMD device not found in either table");
-            console.log(
-              `   • Searched pmd_devices for ID: ${transformedForm.pmd_id}`
-            );
-            console.log(
-              `   • Searched device_inventory for ID: ${transformedForm.pmd_id} with type: pmd`
-            );
-
-            await client.query("ROLLBACK");
-            return res.status(404).json({
-              success: false,
-              message: `PMD device not found in device_inventory: ${transformedForm.pmd_id}`,
-              errorType: "DEVICE_NOT_FOUND",
-              deviceType: "PMD",
-              deviceId: transformedForm.pmd_id,
-            });
-          }
-
-          const pmdInventoryData = pmdInventoryCheck.rows[0];
-          console.log("Found PMD in device_inventory:", pmdInventoryData.imei);
-
-          // Get vehicle_id from the request (should be provided)
-          const vehicleId = transformedForm.vehicle_id;
-          if (!vehicleId) {
-            await client.query("ROLLBACK");
-            return res.status(400).json({
-              success: false,
-              message: "vehicle_id is required to configure PMD device",
-              errorType: "MISSING_VEHICLE_ID",
-            });
-          }
-
-          // Create PMD device in pmd_devices table
-          console.log(
-            `Creating PMD device in pmd_devices table with vehicle_id: ${vehicleId}`
-          );
-          const newPmdDevice = await client.query(
-            `INSERT INTO pmd_devices (
-              id, imei, sim1_number, operator1, sim2_number, operator2, 
-              tracker_model, network, firmware_version, purchase_date, 
-              next_invoice_date, vehicle_id, created_at, updated_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), NOW()) 
-            RETURNING id`,
-            [
-              pmdInventoryData.id,
-              pmdInventoryData.imei,
-              pmdInventoryData.sim1_number, // sim1_number
-              pmdInventoryData.operator1, // operator1
-              "N/A", // sim2_number
-              "N/A", // operator2
-              pmdInventoryData.tracker_model || "N/A",
-              pmdInventoryData.network, // network
-              "N/A", // firmware_version
-              pmdInventoryData.purchase_date || new Date(),
-              null, // next_invoice_date
-              vehicleId,
-            ]
-          );
-
-          pmdDeviceId = newPmdDevice.rows[0].id;
-          console.log(
-            `✅ PMD device created in pmd_devices with ID: ${pmdDeviceId}`
-          );
-        } else {
-          console.log(
-            `✅ PMD device ${transformedForm.pmd_id} exists in pmd_devices`
-          );
-        }
-
-        // Check CSD device exists and configure if needed
-        console.log(`Step 0.2: Checking CSD device: ${transformedForm.csd_id}`);
-        let csdDeviceId = transformedForm.csd_id;
-
-        const csdCheck = await client.query(
-          "SELECT id FROM csd_devices WHERE id = $1",
-          [transformedForm.csd_id]
-        );
-        console.log(`CSD query result: ${csdCheck.rows.length} rows found`);
-
-        if (csdCheck.rows.length === 0) {
-          console.log(
-            "CSD not found in csd_devices table, checking device_inventory..."
-          );
-
-          // Find CSD in device_inventory
-          const csdInventoryCheck = await client.query(
-            "SELECT * FROM device_inventory WHERE id = $1 AND LOWER(device_type) = $2",
-            [transformedForm.csd_id, "csd"]
-          );
-
-          if (csdInventoryCheck.rows.length === 0) {
-            await client.query("ROLLBACK");
-            return res.status(404).json({
-              success: false,
-              message: `CSD device not found in device_inventory: ${transformedForm.csd_id}`,
-              errorType: "DEVICE_NOT_FOUND",
-              deviceType: "CSD",
-              deviceId: transformedForm.csd_id,
-            });
-          }
-
-          const csdInventoryData = csdInventoryCheck.rows[0];
-          console.log("Found CSD in device_inventory:", csdInventoryData.imei);
-
-          // Step 0.2.1: Handle container information
-          console.log("Step 0.2.1: Checking/Creating container...");
-          let containerId = null;
-
-          // Check if container information is provided in the request
-          const containerPlateNumber =
-            transformedForm.container_plate_number ||
-            transformedForm.plate_number;
-          const containerType = transformedForm.container_type || "Standard";
-          const capacityTons = transformedForm.capacity_tons || 20;
-          const carrierId = transformedForm.carrier_id;
-
-          if (containerPlateNumber) {
-            console.log(
-              `Checking container with plate number: ${containerPlateNumber}`
-            );
-
-            // Check if container exists
-            const containerCheck = await client.query(
-              "SELECT id FROM containers WHERE LOWER(plate_number) = LOWER($1)",
-              [containerPlateNumber]
-            );
-
-            if (containerCheck.rows.length > 0) {
-              containerId = containerCheck.rows[0].id;
-              console.log(`✅ Container found with ID: ${containerId}`);
-            } else {
-              // Create new container
-              console.log(
-                `Creating new container with plate number: ${containerPlateNumber}`
-              );
-              const newContainer = await client.query(
-                `INSERT INTO containers (
-                  plate_number, type, capacity_tons, carrier_id, created_at, updated_at
-                ) VALUES ($1, $2, $3, $4, NOW(), NOW()) 
-                RETURNING id`,
-                [
-                  containerPlateNumber,
-                  containerType,
-                  capacityTons,
-                  carrierId || null,
-                ]
-              );
-
-              containerId = newContainer.rows[0].id;
-              console.log(`✅ Container created with ID: ${containerId}`);
-            }
-          } else {
-            console.log(
-              "No container plate number provided, creating CSD without container assignment"
-            );
-          }
-
-          // Create CSD device with container assignment
-          console.log(
-            `Creating CSD device in csd_devices table with container_id: ${containerId}`
-          );
-          const newCsdDevice = await client.query(
-            `INSERT INTO csd_devices (
-              id, imei, sim1_number, operator1, sim2_number, operator2, 
-              tracker_model, network, last_updated, container_id, created_at, 
-              updated_at, device_id, vts_id, firmware_version, purchase_date, 
-              next_invoice_date, configuration_date, ready_to_install
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), $9, NOW(), NOW(), 
-              $10, $11, $12, $13, $14, $15, $16) 
-            RETURNING id`,
-            [
-              csdInventoryData.id,
-              csdInventoryData.imei,
-              csdInventoryData.sim1_number || "N/A", // sim1_number
-              csdInventoryData.operator1 || "N/A", // operator1
-              "N/A", // sim2_number
-              "N/A", // operator2
-              csdInventoryData.tracker_model || "N/A",
-              csdInventoryData.network || "N/A", // network
-              containerId, // container_id - now properly assigned
-              csdInventoryData.device_id || "N/A",
-              null, // vts_id
-              "N/A", // firmware_version
-              csdInventoryData.purchase_date || new Date(),
-              null, // next_invoice_date
-              new Date(), // configuration_date
-              true, // ready_to_install
-            ]
-          );
-
-          csdDeviceId = newCsdDevice.rows[0].id;
-          console.log(
-            `✅ CSD device created in csd_devices with ID: ${csdDeviceId}`
-          );
-        } else {
-          console.log(
-            `✅ CSD device ${transformedForm.csd_id} exists in csd_devices`
-          );
-        }
-
-        // Check eSeal device exists
-        const esealCheck = await client.query(
-          "SELECT id FROM eseal_devices WHERE id = $1",
-          [transformedForm.eseal_id]
-        );
-        if (esealCheck.rows.length === 0) {
-          await client.query("ROLLBACK");
-          return res.status(404).json({
-            success: false,
-            message: `eSeal device not found: ${transformedForm.eseal_id}`,
-            errorType: "DEVICE_NOT_FOUND",
-            deviceType: "ESEAL",
-            deviceId: transformedForm.eseal_id,
-          });
-        }
-        console.log(`✅ eSeal device ${transformedForm.eseal_id} exists`);
-
-        // Check route exists
-        const routeCheck = await client.query(
-          "SELECT id FROM routes WHERE id = $1",
-          [transformedForm.route_id]
-        );
-        if (routeCheck.rows.length === 0) {
-          await client.query("ROLLBACK");
-          return res.status(404).json({
-            success: false,
-            message: `Route not found: ${transformedForm.route_id}`,
-            errorType: "ROUTE_NOT_FOUND",
-            routeId: transformedForm.route_id,
-          });
-        }
-        console.log(`✅ Route ${transformedForm.route_id} exists`);
-
-        console.log("✅ All device and route validations passed");
-
-        // 1) INSERT into pmd_csd_assignments - use configured device IDs
-        console.log("Step 1: Creating PMD-CSD assignment...");
-
-        const assignmentCols = [
-          "pmd_id",
-          "csd_id",
-          "eseal_id",
-          "route_id",
-          "departure_time",
-          "expected_arrival",
-        ];
-
-        // Add optional fields if present
-        if (transformedForm.assigned_at) assignmentCols.push("assigned_at");
-        if (transformedForm.detached_at) assignmentCols.push("detached_at");
-
-        // Use the configured device IDs
-        const assignmentData: any = {
-          pmd_id: pmdDeviceId,
-          csd_id: csdDeviceId,
-          eseal_id: transformedForm.eseal_id,
-          route_id: transformedForm.route_id,
-          departure_time: transformedForm.departure_time,
-          expected_arrival: transformedForm.expected_arrival,
-          assigned_at: transformedForm.assigned_at,
-          detached_at: transformedForm.detached_at,
-        };
-
-        const colsPresent = assignmentCols.filter(
-          (col) => assignmentData[col] !== undefined
-        );
-        const valsPresent = colsPresent.map((col) => assignmentData[col]);
-        const placeholders = colsPresent
-          .map((_, index) => `$${index + 1}`)
-          .join(", ");
-
-        console.log("Assignment data:", {
-          pmdDeviceId,
-          csdDeviceId,
-          eseal_id: transformedForm.eseal_id,
-        });
-
-        const insertAssignmentQuery = `
-          INSERT INTO pmd_csd_assignments (${colsPresent.join(", ")})
-          VALUES (${placeholders})
-          RETURNING id
-        `;
-
-        const assignmentResult = await client.query(
-          insertAssignmentQuery,
-          valsPresent
-        );
-        assignmentId = assignmentResult.rows[0].id;
-        console.log(`Assignment created with ID: ${assignmentId}`);
-
-        // Special case: closing the e-seal
-        if (transformedForm.eseal_id) {
-          await client.query(
-            "UPDATE eseal_devices SET status_seal = $1 WHERE id = $2",
-            ["Closed", transformedForm.eseal_id]
-          );
-          console.log(
-            `E-seal ${transformedForm.eseal_id} status updated to Closed`
-          );
-        }
-
-        // 2) INSERT into trips
-        console.log("Step 2: Creating trip record...");
-
-        const tripCols = [
-          "paired_assignment",
-          "route_id",
-          "departure_time",
-          "expected_arrival",
-          "status",
-          "note",
-          "bl_number",
-          "gd_number",
-          "vir_number",
-        ];
-        const tripVals = [
-          assignmentId,
-          transformedForm.route_id,
-          transformedForm.departure_time,
-          transformedForm.expected_arrival,
-          transformedForm.status || "planned",
-          transformedForm.note || "",
-          transformedForm.trm_data.bl_number || null,
-          transformedForm.trm_data.gd_number || null,
-          transformedForm.trm_data.vir_number || null,
-        ];
-
-        const tripPlaceholders = tripVals
-          .map((_, index) => `$${index + 1}`)
-          .join(", ");
-        const insertTripQuery = `
-          INSERT INTO trips (${tripCols.join(", ")})
-          VALUES (${tripPlaceholders})
-          RETURNING id
-        `;
-
-        const tripResult = await client.query(insertTripQuery, tripVals);
-        tripId = tripResult.rows[0].id;
-        console.log(`Trip created with ID: ${tripId}`);
-
-        // 3) ASSIGN DRIVER TO VEHICLE
-        console.log("Step 3: Processing driver-vehicle assignment...");
-
-        let vehicleId = null;
-
-        // Check if vehicle_id was provided directly, otherwise get from PMD
-        if (transformedForm.vehicle_id) {
-          vehicleId = transformedForm.vehicle_id;
-          console.log(`Using provided vehicle ID: ${vehicleId}`);
-        } else {
-          // Get vehicle_id from PMD record
-          const vehicleResult = await client.query(
-            "SELECT vehicle_id FROM pmd_devices WHERE id = $1",
-            [transformedForm.pmd_id]
-          );
-
-          if (!vehicleResult.rows.length || !vehicleResult.rows[0].vehicle_id) {
-            console.log(
-              `No vehicle linked to PMD ${transformedForm.pmd_id}, continuing without vehicle assignment`
-            );
-          } else {
-            vehicleId = vehicleResult.rows[0].vehicle_id;
-            console.log(`Found vehicle ID from PMD: ${vehicleId}`);
-          }
-        }
-
-        const driverId = transformedForm.driver_id;
-
-        // Only proceed if BOTH IDs are provided
-        if (vehicleId && driverId) {
-          // Check if vehicle already has an active driver
-          const activeVehicleDriver = await client.query(
-            "SELECT 1 FROM vehicle_driver_assignments WHERE vehicle_id = $1 AND end_time IS NULL",
-            [vehicleId]
-          );
-
-          if (activeVehicleDriver.rows.length > 0) {
-            await client.query("ROLLBACK");
-            return res.status(409).json({
-              success: false,
-              message: `Vehicle ${vehicleId} already has an active driver assignment`,
-            });
-          }
-
-          // Check if driver is already assigned elsewhere
-          const activeDriverVehicle = await client.query(
-            "SELECT 1 FROM vehicle_driver_assignments WHERE driver_id = $1 AND end_time IS NULL",
-            [driverId]
-          );
-
-          if (activeDriverVehicle.rows.length > 0) {
-            await client.query("ROLLBACK");
-            return res.status(409).json({
-              success: false,
-              message: `Driver ${driverId} already has an active vehicle assignment`,
-            });
-          }
-
-          // Create new driver-vehicle assignment
-          const vdaResult = await client.query(
-            `INSERT INTO vehicle_driver_assignments 
-             (vehicle_id, driver_id, start_time, end_time)
-             VALUES ($1, $2, $3, $4)
-             RETURNING id`,
-            [
-              vehicleId,
-              driverId,
-              transformedForm.departure_time,
-              transformedForm.end_time || null,
-            ]
-          );
-          vdaId = vdaResult.rows[0].id;
-          console.log(`Driver-vehicle assignment created with ID: ${vdaId}`);
-        } else {
-          console.log(
-            `Skipping driver-vehicle assignment. Vehicle ID: ${vehicleId}, Driver ID: ${driverId}`
-          );
-        }
-
-        // 4) INSERT trip halts
-        console.log("Step 4: Processing trip halts...");
-
-        const haltsRaw = transformedForm.halts || form.halts || "[]";
-        let halts: any[] = [];
-
-        try {
-          halts =
-            typeof haltsRaw === "string" ? JSON.parse(haltsRaw) : haltsRaw;
-        } catch (error) {
-          console.log("No valid halts data provided, continuing without halts");
-          halts = [];
-        }
-
-        for (const halt of halts) {
-          await client.query(
-            `INSERT INTO trip_halts 
-             (trip_id, route_stop_id, scheduled_halt_duration, actual_halt_duration)
-             VALUES ($1, $2, $3, $4)`,
-            [
-              tripId,
-              halt.route_stop_id,
-              halt.scheduled_halt_duration,
-              halt.actual_halt_duration || "00:00:00",
-            ]
-          );
-        }
-        console.log(`${halts.length} trip halts created`);
-
-        // 5) Create trip log entry
-        console.log("Step 5: Creating trip log...");
-
-        // Fetch assignment details for logging
-        const assignmentDetails = await client.query(
-          `SELECT assigned_at, detached_at, pmd_img_url, csd_img_url, eseal_img_url
-           FROM pmd_csd_assignments WHERE id = $1`,
-          [assignmentId]
-        );
-
-        const {
-          assigned_at,
-          detached_at,
-          pmd_img_url,
-          csd_img_url,
-          eseal_img_url,
-        } = assignmentDetails.rows[0];
-
-        const logCols = [
-          "assignment_id",
-          "pmd_id",
-          "csd_id",
-          "eseal_id",
-          "route_id",
-          "departure_time",
-          "expected_arrival",
-          "assigned_at",
-          "detached_at",
-          "pmd_img_url",
-          "csd_img_url",
-          "eseal_img_url",
-          "trip_id",
-          "status",
-          "note",
-          "vehicle_id",
-          "driver_id",
-          "vda_id",
-          "driver_start",
-          "driver_end",
-        ];
-
-        const logVals = [
-          assignmentId,
-          transformedForm.pmd_id,
-          transformedForm.csd_id,
-          transformedForm.eseal_id,
-          transformedForm.route_id,
-          transformedForm.departure_time,
-          transformedForm.expected_arrival,
-          assigned_at,
-          detached_at,
-          pmd_img_url,
-          csd_img_url,
-          eseal_img_url,
-          tripId,
-          transformedForm.status || "planned",
-          transformedForm.note || "",
-          vehicleId || null,
-          transformedForm.driver_id || null,
-          vdaId || null,
-          transformedForm.departure_time || null,
-          transformedForm.end_time || null,
-        ];
-
-        const logPlaceholders = logVals
-          .map((_, index) => `$${index + 1}`)
-          .join(", ");
-        const tripLogResult = await client.query(
-          `INSERT INTO trip_logs (${logCols.join(
-            ", "
-          )}) VALUES (${logPlaceholders})
-          RETURNING id`,
-          logVals
-        );
-        const tripLogId = tripLogResult.rows[0].id;
-        console.log(`Trip log created with ID: ${tripLogId}`);
-
-        // Insert into public.add_trip_col
-        console.log("Step 5.1: Creating add_trip_col record...");
-        const addTripColQuery = `
-          INSERT INTO public.add_trip_col (
-            container_id,
-            carrier_id,
-            trip_log_id,
-            gd_no,
-            trip_type
-          ) VALUES ($1, $2, $3, $4, $5)
-          RETURNING id
-        `;
-
-        const addTripColVals = [
-          transformedForm.container_id || null,
-          transformedForm.carrier_id || null,
-          tripLogId,  // Now using the correct trip_log_id
-          transformedForm.trm_data.gd_number || null,
-          transformedForm.trm_data.declaration_type || null
-        ];
-
-        await client.query(addTripColQuery, addTripColVals);
-        console.log('✅ Additional trip columns created in add_trip_col table');
-
-        // Commit transaction
-        await client.query("COMMIT");
-        console.log("Trip creation completed successfully");
-
-        return res.status(201).json({
-          success: true,
-          message: "Trip created successfully",
-          data: {
-            assignment_id: assignmentId,
-            trip_id: tripId,
-            vehicle_driver_assignment_id: vdaId,
-            vehicle_id: vehicleId,
-            driver_id: transformedForm.driver_id || null,
-          },
-        });
-      } catch (error) {
-        // Rollback transaction
-        console.log("\n🚨 TRANSACTION ROLLBACK INITIATED");
-        console.log("=========================================");
-
-        try {
-          await client.query("ROLLBACK");
-          console.log("✅ Transaction rolled back successfully");
-        } catch (rollbackError) {
-          console.log("❌ Error during rollback:", rollbackError);
-        }
-
-        const pgError = error as { 
-          constraint?: string;
-          detail?: string;
-          hint?: string;
-        };
-
-        if (pgError.constraint) {
-          console.log(`   • Constraint Violation: ${pgError.constraint}`);
-        }
-
-        if (pgError.detail) {
-          console.log(`   • Error Detail: ${pgError.detail}`);
-        }
-
-        if (pgError.hint) {
-          console.log(`   • Error Hint: ${pgError.hint}`);
-        }
-
-
-        // Log current state for debugging
-        console.log("\n📊 DEBUG STATE INFORMATION");
-        console.log("=========================================");
-        console.log(`   • Assignment ID: ${assignmentId}`);
-        console.log(`   • Trip ID: ${tripId}`);
-        console.log(`   • VDA ID: ${vdaId}`);
-        console.log(`   • Request ID: ${requestId}`);
-
-        throw error;
-      } finally {
-        client.release();
-      }
-    } catch (error) {
-      console.error("Error in createTrip:", error);
-      return res.status(500).json({
-        success: false,
-        message: "Internal server error",
-        error:
-          error instanceof Error ? error.message : "Unknown error occurred",
-      });
-    }
-  }
+  //     // Validate required fields
+  //     const required = [
+  //       "pmd_id",
+  //       "csd_id",
+  //       "eseal_id",
+  //       "route_id",
+  //       "departure_time",
+  //       "expected_arrival",
+  //     ];
+  //     const missing = required.filter((field) => {
+  //       const value = transformedForm[field];
+  //       const isEmpty =
+  //         !value || value === "" || value === null || value === undefined;
+  //       if (isEmpty) {
+  //         console.log(`❌ Missing field: ${field} (value: ${value})`);
+  //       } else {
+  //         console.log(`✅ Field present: ${field} = ${value}`);
+  //       }
+  //       return isEmpty;
+  //     });
+
+  //     console.log(
+  //       `📊 Validation Summary: ${required.length - missing.length}/${
+  //         required.length
+  //       } required fields present`
+  //     );
+
+  //     if (missing.length > 0) {
+  //       console.log(
+  //         `\n🚫 VALIDATION FAILED - Missing ${missing.length} required fields:`
+  //       );
+  //       missing.forEach((field) => console.log(`   • ${field}`));
+
+  //       return res.status(400).json({
+  //         success: false,
+  //         message: `Missing fields: ${missing.join(", ")}`,
+  //         missingFields: missing,
+  //         receivedData: form,
+  //         requestId: requestId,
+  //       });
+  //     }
+
+  //     console.log("✅ All required fields validated successfully");
+
+  //       console.log("\n🔌 STEP 2: DATABASE CONNECTION");
+  //     console.log("=========================================");
+  //     const client = await pool.connect();
+  //     console.log("✅ Database connection established");
+
+  //     // Set replica identity for eseal_devices table if not already set
+  //     try {
+  //       await client.query('ALTER TABLE eseal_devices REPLICA IDENTITY FULL');
+  //       console.log("✅ Replica identity set for eseal_devices table");
+  //     } catch (error) {
+  //       const pgError = error as { message?: string };
+  //       console.log("ℹ️ Replica identity might already be set:", pgError.message || "Unknown error");
+  //       // Continue with the process as the table might already have replica identity set
+  //     }      // Variables to track for rollback
+  //     let assignmentId: number | null = null;
+  //     let tripId: number | null = null;
+  //     let vdaId: number | null = null;
+
+  //     try {
+  //       // Start transaction
+  //       console.log("\n💾 STEP 3: TRANSACTION MANAGEMENT");
+  //       console.log("=========================================");
+  //       await client.query("BEGIN");
+  //       console.log("✅ Database transaction started");
+
+  //       // VALIDATION: Check if all device IDs exist before creating assignment
+  //       console.log("\n🔍 STEP 4: DEVICE VALIDATION & AUTO-CONFIGURATION");
+  //       console.log("=========================================");
+
+  //       // First, let's check what tables exist
+  //       console.log("\n📊 STEP 4.0: DATABASE SCHEMA VERIFICATION");
+  //       console.log("-----------------------------------------");
+  //       try {
+  //         const tableCheck = await client.query(`
+  //           SELECT table_name 
+  //           FROM information_schema.tables 
+  //           WHERE table_schema = 'public' 
+  //           AND table_name IN ('pmd_devices', 'csd_devices', 'eseal_devices', 'device_inventory', 'routes', 'containers')
+  //           ORDER BY table_name
+  //         `);
+  //         const availableTables = tableCheck.rows.map((r) => r.table_name);
+  //         console.log("✅ Database tables verified:");
+  //         availableTables.forEach((table) => console.log(`   • ${table}`));
+
+  //         // Check table record counts for context
+  //         for (const table of availableTables) {
+  //           try {
+  //             const countResult = await client.query(
+  //               `SELECT COUNT(*) as count FROM ${table}`
+  //             );
+  //             console.log(
+  //               `   📈 ${table}: ${countResult.rows[0].count} records`
+  //             );
+  //           } catch (countError) {
+  //             console.log(`   ⚠️  ${table}: Unable to count records`);
+  //           }
+  //         }
+  //       } catch (error) {
+  //         console.log("❌ Error checking database schema:", error);
+  //         throw new Error(`Database schema verification failed: ${error}`);
+  //       }
+
+  //       // Check PMD device exists
+  //       console.log("\n🔍 STEP 4.1: PMD DEVICE VALIDATION");
+  //       console.log("-----------------------------------------");
+  //       console.log(`🎯 Target PMD ID: ${transformedForm.pmd_id}`);
+  //       console.log(`📊 Data Type: ${typeof transformedForm.pmd_id}`);
+
+  //       let pmdDeviceId = transformedForm.pmd_id;
+
+  //       console.log("🔍 Querying pmd_devices table...");
+  //       const pmdCheck = await client.query(
+  //         "SELECT id, imei, vehicle_id FROM pmd_devices WHERE id = $1",
+  //         [transformedForm.pmd_id]
+  //       );
+  //       console.log(
+  //         `📊 PMD devices query result: ${pmdCheck.rows.length} rows found`
+  //       );
+
+  //       if (pmdCheck.rows.length > 0) {
+  //         console.log("✅ PMD device found in pmd_devices table:");
+  //         console.log(`   • ID: ${pmdCheck.rows[0].id}`);
+  //         console.log(`   • IMEI: ${pmdCheck.rows[0].imei}`);
+  //         console.log(`   • Vehicle ID: ${pmdCheck.rows[0].vehicle_id}`);
+  //       }
+
+  //       if (pmdCheck.rows.length === 0) {
+  //         console.log(
+  //           "⚠️  PMD not found in pmd_devices table, checking device_inventory..."
+  //         );
+
+  //         // Find PMD in device_inventory
+  //         const pmdInventoryCheck = await client.query(
+  //           "SELECT * FROM device_inventory WHERE id = $1 AND LOWER(device_type) = $2",
+  //           [transformedForm.pmd_id, "pmd"]
+  //         );
+
+  //         console.log(
+  //           `📊 PMD inventory query result: ${pmdInventoryCheck.rows.length} rows found`
+  //         );
+
+  //         if (pmdInventoryCheck.rows.length === 0) {
+  //           console.log("❌ PMD device not found in either table");
+  //           console.log(
+  //             `   • Searched pmd_devices for ID: ${transformedForm.pmd_id}`
+  //           );
+  //           console.log(
+  //             `   • Searched device_inventory for ID: ${transformedForm.pmd_id} with type: pmd`
+  //           );
+
+  //           await client.query("ROLLBACK");
+  //           return res.status(404).json({
+  //             success: false,
+  //             message: `PMD device not found in device_inventory: ${transformedForm.pmd_id}`,
+  //             errorType: "DEVICE_NOT_FOUND",
+  //             deviceType: "PMD",
+  //             deviceId: transformedForm.pmd_id,
+  //           });
+  //         }
+
+  //         const pmdInventoryData = pmdInventoryCheck.rows[0];
+  //         console.log("Found PMD in device_inventory:", pmdInventoryData.imei);
+
+  //         // Get vehicle_id from the request (should be provided)
+  //         const vehicleId = transformedForm.vehicle_id;
+  //         if (!vehicleId) {
+  //           await client.query("ROLLBACK");
+  //           return res.status(400).json({
+  //             success: false,
+  //             message: "vehicle_id is required to configure PMD device",
+  //             errorType: "MISSING_VEHICLE_ID",
+  //           });
+  //         }
+
+  //         // Create PMD device in pmd_devices table
+  //         console.log(
+  //           `Creating PMD device in pmd_devices table with vehicle_id: ${vehicleId}`
+  //         );
+  //         const newPmdDevice = await client.query(
+  //           `INSERT INTO pmd_devices (
+  //             id, imei, sim1_number, operator1, sim2_number, operator2, 
+  //             tracker_model, network, firmware_version, purchase_date, 
+  //             next_invoice_date, vehicle_id, created_at, updated_at
+  //           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), NOW()) 
+  //           RETURNING id`,
+  //           [
+  //             pmdInventoryData.id,
+  //             pmdInventoryData.imei,
+  //             pmdInventoryData.sim1_number, // sim1_number
+  //             pmdInventoryData.operator1, // operator1
+  //             "N/A", // sim2_number
+  //             "N/A", // operator2
+  //             pmdInventoryData.tracker_model || "N/A",
+  //             pmdInventoryData.network, // network
+  //             "N/A", // firmware_version
+  //             pmdInventoryData.purchase_date || new Date(),
+  //             null, // next_invoice_date
+  //             vehicleId,
+  //           ]
+  //         );
+
+  //         pmdDeviceId = newPmdDevice.rows[0].id;
+  //         console.log(
+  //           `✅ PMD device created in pmd_devices with ID: ${pmdDeviceId}`
+  //         );
+  //       } else {
+  //         console.log(
+  //           `✅ PMD device ${transformedForm.pmd_id} exists in pmd_devices`
+  //         );
+  //       }
+
+  //       // Check CSD device exists and configure if needed
+  //       console.log(`Step 0.2: Checking CSD device: ${transformedForm.csd_id}`);
+  //       let csdDeviceId = transformedForm.csd_id;
+
+  //       const csdCheck = await client.query(
+  //         "SELECT id FROM csd_devices WHERE id = $1",
+  //         [transformedForm.csd_id]
+  //       );
+  //       console.log(`CSD query result: ${csdCheck.rows.length} rows found`);
+
+  //       if (csdCheck.rows.length === 0) {
+  //         console.log(
+  //           "CSD not found in csd_devices table, checking device_inventory..."
+  //         );
+
+  //         // Find CSD in device_inventory
+  //         const csdInventoryCheck = await client.query(
+  //           "SELECT * FROM device_inventory WHERE id = $1 AND LOWER(device_type) = $2",
+  //           [transformedForm.csd_id, "csd"]
+  //         );
+
+  //         if (csdInventoryCheck.rows.length === 0) {
+  //           await client.query("ROLLBACK");
+  //           return res.status(404).json({
+  //             success: false,
+  //             message: `CSD device not found in device_inventory: ${transformedForm.csd_id}`,
+  //             errorType: "DEVICE_NOT_FOUND",
+  //             deviceType: "CSD",
+  //             deviceId: transformedForm.csd_id,
+  //           });
+  //         }
+
+  //         const csdInventoryData = csdInventoryCheck.rows[0];
+  //         console.log("Found CSD in device_inventory:", csdInventoryData.imei);
+
+  //         // Step 0.2.1: Handle container information
+  //         console.log("Step 0.2.1: Checking/Creating container...");
+  //         let containerId = null;
+
+  //         // Check if container information is provided in the request
+  //         const containerPlateNumber =
+  //           transformedForm.container_plate_number ||
+  //           transformedForm.plate_number;
+  //         const containerType = transformedForm.container_type || "Standard";
+  //         const capacityTons = transformedForm.capacity_tons || 20;
+  //         const carrierId = transformedForm.carrier_id;
+
+  //         if (containerPlateNumber) {
+  //           console.log(
+  //             `Checking container with plate number: ${containerPlateNumber}`
+  //           );
+
+  //           // Check if container exists
+  //           const containerCheck = await client.query(
+  //             "SELECT id FROM containers WHERE LOWER(plate_number) = LOWER($1)",
+  //             [containerPlateNumber]
+  //           );
+
+  //           if (containerCheck.rows.length > 0) {
+  //             containerId = containerCheck.rows[0].id;
+  //             console.log(`✅ Container found with ID: ${containerId}`);
+  //           } else {
+  //             // Create new container
+  //             console.log(
+  //               `Creating new container with plate number: ${containerPlateNumber}`
+  //             );
+  //             const newContainer = await client.query(
+  //               `INSERT INTO containers (
+  //                 plate_number, type, capacity_tons, carrier_id, created_at, updated_at
+  //               ) VALUES ($1, $2, $3, $4, NOW(), NOW()) 
+  //               RETURNING id`,
+  //               [
+  //                 containerPlateNumber,
+  //                 containerType,
+  //                 capacityTons,
+  //                 carrierId || null,
+  //               ]
+  //             );
+
+  //             containerId = newContainer.rows[0].id;
+  //             console.log(`✅ Container created with ID: ${containerId}`);
+  //           }
+  //         } else {
+  //           console.log(
+  //             "No container plate number provided, creating CSD without container assignment"
+  //           );
+  //         }
+
+  //         // Create CSD device with container assignment
+  //         console.log(
+  //           `Creating CSD device in csd_devices table with container_id: ${containerId}`
+  //         );
+  //         const newCsdDevice = await client.query(
+  //           `INSERT INTO csd_devices (
+  //             id, imei, sim1_number, operator1, sim2_number, operator2, 
+  //             tracker_model, network, last_updated, container_id, created_at, 
+  //             updated_at, device_id, vts_id, firmware_version, purchase_date, 
+  //             next_invoice_date, configuration_date, ready_to_install
+  //           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), $9, NOW(), NOW(), 
+  //             $10, $11, $12, $13, $14, $15, $16) 
+  //           RETURNING id`,
+  //           [
+  //             csdInventoryData.id,
+  //             csdInventoryData.imei,
+  //             csdInventoryData.sim1_number || "N/A", // sim1_number
+  //             csdInventoryData.operator1 || "N/A", // operator1
+  //             "N/A", // sim2_number
+  //             "N/A", // operator2
+  //             csdInventoryData.tracker_model || "N/A",
+  //             csdInventoryData.network || "N/A", // network
+  //             containerId, // container_id - now properly assigned
+  //             csdInventoryData.device_id || "N/A",
+  //             null, // vts_id
+  //             "N/A", // firmware_version
+  //             csdInventoryData.purchase_date || new Date(),
+  //             null, // next_invoice_date
+  //             new Date(), // configuration_date
+  //             true, // ready_to_install
+  //           ]
+  //         );
+
+  //         csdDeviceId = newCsdDevice.rows[0].id;
+  //         console.log(
+  //           `✅ CSD device created in csd_devices with ID: ${csdDeviceId}`
+  //         );
+  //       } else {
+  //         console.log(
+  //           `✅ CSD device ${transformedForm.csd_id} exists in csd_devices`
+  //         );
+  //       }
+
+  //       // Check eSeal device exists
+  //       const esealCheck = await client.query(
+  //         "SELECT id FROM eseal_devices WHERE id = $1",
+  //         [transformedForm.eseal_id]
+  //       );
+  //       if (esealCheck.rows.length === 0) {
+  //         await client.query("ROLLBACK");
+  //         return res.status(404).json({
+  //           success: false,
+  //           message: `eSeal device not found: ${transformedForm.eseal_id}`,
+  //           errorType: "DEVICE_NOT_FOUND",
+  //           deviceType: "ESEAL",
+  //           deviceId: transformedForm.eseal_id,
+  //         });
+  //       }
+  //       console.log(`✅ eSeal device ${transformedForm.eseal_id} exists`);
+
+  //       // Check route exists
+  //       const routeCheck = await client.query(
+  //         "SELECT id FROM routes WHERE id = $1",
+  //         [transformedForm.route_id]
+  //       );
+  //       if (routeCheck.rows.length === 0) {
+  //         await client.query("ROLLBACK");
+  //         return res.status(404).json({
+  //           success: false,
+  //           message: `Route not found: ${transformedForm.route_id}`,
+  //           errorType: "ROUTE_NOT_FOUND",
+  //           routeId: transformedForm.route_id,
+  //         });
+  //       }
+  //       console.log(`✅ Route ${transformedForm.route_id} exists`);
+
+  //       console.log("✅ All device and route validations passed");
+
+  //       // 1) INSERT into pmd_csd_assignments - use configured device IDs
+  //       console.log("Step 1: Creating PMD-CSD assignment...");
+
+  //       const assignmentCols = [
+  //         "pmd_id",
+  //         "csd_id",
+  //         "eseal_id",
+  //         "route_id",
+  //         "departure_time",
+  //         "expected_arrival",
+  //       ];
+
+  //       // Add optional fields if present
+  //       if (transformedForm.assigned_at) assignmentCols.push("assigned_at");
+  //       if (transformedForm.detached_at) assignmentCols.push("detached_at");
+
+  //       // Use the configured device IDs
+  //       const assignmentData: any = {
+  //         pmd_id: pmdDeviceId,
+  //         csd_id: csdDeviceId,
+  //         eseal_id: transformedForm.eseal_id,
+  //         route_id: transformedForm.route_id,
+  //         departure_time: transformedForm.departure_time,
+  //         expected_arrival: transformedForm.expected_arrival,
+  //         assigned_at: transformedForm.assigned_at,
+  //         detached_at: transformedForm.detached_at,
+  //       };
+
+  //       const colsPresent = assignmentCols.filter(
+  //         (col) => assignmentData[col] !== undefined
+  //       );
+  //       const valsPresent = colsPresent.map((col) => assignmentData[col]);
+  //       const placeholders = colsPresent
+  //         .map((_, index) => `$${index + 1}`)
+  //         .join(", ");
+
+  //       console.log("Assignment data:", {
+  //         pmdDeviceId,
+  //         csdDeviceId,
+  //         eseal_id: transformedForm.eseal_id,
+  //       });
+
+  //       const insertAssignmentQuery = `
+  //         INSERT INTO pmd_csd_assignments (${colsPresent.join(", ")})
+  //         VALUES (${placeholders})
+  //         RETURNING id
+  //       `;
+
+  //       const assignmentResult = await client.query(
+  //         insertAssignmentQuery,
+  //         valsPresent
+  //       );
+  //       assignmentId = assignmentResult.rows[0].id;
+  //       console.log(`Assignment created with ID: ${assignmentId}`);
+
+  //       // Special case: closing the e-seal
+  //       if (transformedForm.eseal_id) {
+  //         await client.query(
+  //           "UPDATE eseal_devices SET status_seal = $1 WHERE id = $2",
+  //           ["Closed", transformedForm.eseal_id]
+  //         );
+  //         console.log(
+  //           `E-seal ${transformedForm.eseal_id} status updated to Closed`
+  //         );
+  //       }
+
+  //       // 2) INSERT into trips
+  //       console.log("Step 2: Creating trip record...");
+
+  //       const tripCols = [
+  //         "paired_assignment",
+  //         "route_id",
+  //         "departure_time",
+  //         "expected_arrival",
+  //         "status",
+  //         "note",
+  //         "bl_number",
+  //         "gd_number",
+  //         "vir_number",
+  //       ];
+  //       const tripVals = [
+  //         assignmentId,
+  //         transformedForm.route_id,
+  //         transformedForm.departure_time,
+  //         transformedForm.expected_arrival,
+  //         transformedForm.status || "planned",
+  //         transformedForm.note || "",
+  //         transformedForm.trm_data.bl_number || null,
+  //         transformedForm.trm_data.gd_number || null,
+  //         transformedForm.trm_data.vir_number || null,
+  //       ];
+
+  //       const tripPlaceholders = tripVals
+  //         .map((_, index) => `$${index + 1}`)
+  //         .join(", ");
+  //       const insertTripQuery = `
+  //         INSERT INTO trips (${tripCols.join(", ")})
+  //         VALUES (${tripPlaceholders})
+  //         RETURNING id
+  //       `;
+
+  //       const tripResult = await client.query(insertTripQuery, tripVals);
+  //       tripId = tripResult.rows[0].id;
+  //       console.log(`Trip created with ID: ${tripId}`);
+
+  //       // 3) ASSIGN DRIVER TO VEHICLE
+  //       console.log("Step 3: Processing driver-vehicle assignment...");
+
+  //       let vehicleId = null;
+
+  //       // Check if vehicle_id was provided directly, otherwise get from PMD
+  //       if (transformedForm.vehicle_id) {
+  //         vehicleId = transformedForm.vehicle_id;
+  //         console.log(`Using provided vehicle ID: ${vehicleId}`);
+  //       } else {
+  //         // Get vehicle_id from PMD record
+  //         const vehicleResult = await client.query(
+  //           "SELECT vehicle_id FROM pmd_devices WHERE id = $1",
+  //           [transformedForm.pmd_id]
+  //         );
+
+  //         if (!vehicleResult.rows.length || !vehicleResult.rows[0].vehicle_id) {
+  //           console.log(
+  //             `No vehicle linked to PMD ${transformedForm.pmd_id}, continuing without vehicle assignment`
+  //           );
+  //         } else {
+  //           vehicleId = vehicleResult.rows[0].vehicle_id;
+  //           console.log(`Found vehicle ID from PMD: ${vehicleId}`);
+  //         }
+  //       }
+
+  //       const driverId = transformedForm.driver_id;
+
+  //       // Only proceed if BOTH IDs are provided
+  //       if (vehicleId && driverId) {
+  //         // Check if vehicle already has an active driver
+  //         const activeVehicleDriver = await client.query(
+  //           "SELECT 1 FROM vehicle_driver_assignments WHERE vehicle_id = $1 AND end_time IS NULL",
+  //           [vehicleId]
+  //         );
+
+  //         if (activeVehicleDriver.rows.length > 0) {
+  //           await client.query("ROLLBACK");
+  //           return res.status(409).json({
+  //             success: false,
+  //             message: `Vehicle ${vehicleId} already has an active driver assignment`,
+  //           });
+  //         }
+
+  //         // Check if driver is already assigned elsewhere
+  //         const activeDriverVehicle = await client.query(
+  //           "SELECT 1 FROM vehicle_driver_assignments WHERE driver_id = $1 AND end_time IS NULL",
+  //           [driverId]
+  //         );
+
+  //         if (activeDriverVehicle.rows.length > 0) {
+  //           await client.query("ROLLBACK");
+  //           return res.status(409).json({
+  //             success: false,
+  //             message: `Driver ${driverId} already has an active vehicle assignment`,
+  //           });
+  //         }
+
+  //         // Create new driver-vehicle assignment
+  //         const vdaResult = await client.query(
+  //           `INSERT INTO vehicle_driver_assignments 
+  //            (vehicle_id, driver_id, start_time, end_time)
+  //            VALUES ($1, $2, $3, $4)
+  //            RETURNING id`,
+  //           [
+  //             vehicleId,
+  //             driverId,
+  //             transformedForm.departure_time,
+  //             transformedForm.end_time || null,
+  //           ]
+  //         );
+  //         vdaId = vdaResult.rows[0].id;
+  //         console.log(`Driver-vehicle assignment created with ID: ${vdaId}`);
+  //       } else {
+  //         console.log(
+  //           `Skipping driver-vehicle assignment. Vehicle ID: ${vehicleId}, Driver ID: ${driverId}`
+  //         );
+  //       }
+
+  //       // 4) INSERT trip halts
+  //       console.log("Step 4: Processing trip halts...");
+
+  //       const haltsRaw = transformedForm.halts || form.halts || "[]";
+  //       let halts: any[] = [];
+
+  //       try {
+  //         halts =
+  //           typeof haltsRaw === "string" ? JSON.parse(haltsRaw) : haltsRaw;
+  //       } catch (error) {
+  //         console.log("No valid halts data provided, continuing without halts");
+  //         halts = [];
+  //       }
+
+  //       for (const halt of halts) {
+  //         await client.query(
+  //           `INSERT INTO trip_halts 
+  //            (trip_id, route_stop_id, scheduled_halt_duration, actual_halt_duration)
+  //            VALUES ($1, $2, $3, $4)`,
+  //           [
+  //             tripId,
+  //             halt.route_stop_id,
+  //             halt.scheduled_halt_duration,
+  //             halt.actual_halt_duration || "00:00:00",
+  //           ]
+  //         );
+  //       }
+  //       console.log(`${halts.length} trip halts created`);
+
+  //       // 5) Create trip log entry
+  //       console.log("Step 5: Creating trip log...");
+
+  //       // Fetch assignment details for logging
+  //       const assignmentDetails = await client.query(
+  //         `SELECT assigned_at, detached_at, pmd_img_url, csd_img_url, eseal_img_url
+  //          FROM pmd_csd_assignments WHERE id = $1`,
+  //         [assignmentId]
+  //       );
+
+  //       const {
+  //         assigned_at,
+  //         detached_at,
+  //         pmd_img_url,
+  //         csd_img_url,
+  //         eseal_img_url,
+  //       } = assignmentDetails.rows[0];
+
+  //       const logCols = [
+  //         "assignment_id",
+  //         "pmd_id",
+  //         "csd_id",
+  //         "eseal_id",
+  //         "route_id",
+  //         "departure_time",
+  //         "expected_arrival",
+  //         "assigned_at",
+  //         "detached_at",
+  //         "pmd_img_url",
+  //         "csd_img_url",
+  //         "eseal_img_url",
+  //         "trip_id",
+  //         "status",
+  //         "note",
+  //         "vehicle_id",
+  //         "driver_id",
+  //         "vda_id",
+  //         "driver_start",
+  //         "driver_end",
+  //       ];
+
+  //       const logVals = [
+  //         assignmentId,
+  //         transformedForm.pmd_id,
+  //         transformedForm.csd_id,
+  //         transformedForm.eseal_id,
+  //         transformedForm.route_id,
+  //         transformedForm.departure_time,
+  //         transformedForm.expected_arrival,
+  //         assigned_at,
+  //         detached_at,
+  //         pmd_img_url,
+  //         csd_img_url,
+  //         eseal_img_url,
+  //         tripId,
+  //         transformedForm.status || "planned",
+  //         transformedForm.note || "",
+  //         vehicleId || null,
+  //         transformedForm.driver_id || null,
+  //         vdaId || null,
+  //         transformedForm.departure_time || null,
+  //         transformedForm.end_time || null,
+  //       ];
+
+  //       const logPlaceholders = logVals
+  //         .map((_, index) => `$${index + 1}`)
+  //         .join(", ");
+  //       const tripLogResult = await client.query(
+  //         `INSERT INTO trip_logs (${logCols.join(
+  //           ", "
+  //         )}) VALUES (${logPlaceholders})
+  //         RETURNING id`,
+  //         logVals
+  //       );
+  //       const tripLogId = tripLogResult.rows[0].id;
+  //       console.log(`Trip log created with ID: ${tripLogId}`);
+
+  //       // Insert into public.add_trip_col
+  //       console.log("Step 5.1: Creating add_trip_col record...");
+  //       const addTripColQuery = `
+  //         INSERT INTO public.add_trip_col (
+  //           container_id,
+  //           carrier_id,
+  //           trip_log_id,
+  //           gd_no,
+  //           trip_type
+  //         ) VALUES ($1, $2, $3, $4, $5)
+  //         RETURNING id
+  //       `;
+
+  //       const addTripColVals = [
+  //         transformedForm.container_id || null,
+  //         transformedForm.carrier_id || null,
+  //         tripLogId,  // Now using the correct trip_log_id
+  //         transformedForm.trm_data.gd_number || null,
+  //         transformedForm.trm_data.declaration_type || null
+  //       ];
+
+  //       await client.query(addTripColQuery, addTripColVals);
+  //       console.log('✅ Additional trip columns created in add_trip_col table');
+
+  //       // Commit transaction
+  //       await client.query("COMMIT");
+  //       console.log("Trip creation completed successfully");
+
+  //       return res.status(201).json({
+  //         success: true,
+  //         message: "Trip created successfully",
+  //         data: {
+  //           assignment_id: assignmentId,
+  //           trip_id: tripId,
+  //           vehicle_driver_assignment_id: vdaId,
+  //           vehicle_id: vehicleId,
+  //           driver_id: transformedForm.driver_id || null,
+  //         },
+  //       });
+  //     } catch (error) {
+  //       // Rollback transaction
+  //       console.log("\n🚨 TRANSACTION ROLLBACK INITIATED");
+  //       console.log("=========================================");
+
+  //       try {
+  //         await client.query("ROLLBACK");
+  //         console.log("✅ Transaction rolled back successfully");
+  //       } catch (rollbackError) {
+  //         console.log("❌ Error during rollback:", rollbackError);
+  //       }
+
+  //       const pgError = error as { 
+  //         constraint?: string;
+  //         detail?: string;
+  //         hint?: string;
+  //       };
+
+  //       if (pgError.constraint) {
+  //         console.log(`   • Constraint Violation: ${pgError.constraint}`);
+  //       }
+
+  //       if (pgError.detail) {
+  //         console.log(`   • Error Detail: ${pgError.detail}`);
+  //       }
+
+  //       if (pgError.hint) {
+  //         console.log(`   • Error Hint: ${pgError.hint}`);
+  //       }
+
+
+  //       // Log current state for debugging
+  //       console.log("\n📊 DEBUG STATE INFORMATION");
+  //       console.log("=========================================");
+  //       console.log(`   • Assignment ID: ${assignmentId}`);
+  //       console.log(`   • Trip ID: ${tripId}`);
+  //       console.log(`   • VDA ID: ${vdaId}`);
+  //       console.log(`   • Request ID: ${requestId}`);
+
+  //       throw error;
+  //     } finally {
+  //       client.release();
+  //     }
+  //   } catch (error) {
+  //     console.error("Error in createTrip:", error);
+  //     return res.status(500).json({
+  //       success: false,
+  //       message: "Internal server error",
+  //       error:
+  //         error instanceof Error ? error.message : "Unknown error occurred",
+  //     });
+  //   }
+  // }
 
   // New function to get configured PMD devices
   static async getConfiguredPMDDevices(req: Request, res: Response) {
