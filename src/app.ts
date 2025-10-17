@@ -12,14 +12,11 @@ import PlatformRouter from "./routes/platform-routes";
 import TRMRouters from "./routes/trm-routes";
 import TripRoutes from "./routes/trip-routes";
 
-
-
 dotenv.config();
 
 const app = express();
-app.use(express.json());
 
-//ServerError handling
+// ServerError handling
 const allowedOrigins = [
   'http://localhost:9000',
   'https://device-tracker-dashboard-eight.vercel.app'
@@ -32,7 +29,7 @@ if (process.env.CMS_FRONTEND_URL) {
 
 const corsOptions = {
   origin: allowedOrigins,
-  credentials: true, // Allow credentials
+  credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
 };
@@ -50,7 +47,6 @@ app.use("/api/platform", PlatformRouter);
 app.use("/api/psw", TRMRouters);
 app.use("/api/trip", TripRoutes);
 
-
 // Health check endpoint
 app.get("/health", (req, res) => {
   res.status(200).json({
@@ -59,6 +55,7 @@ app.get("/health", (req, res) => {
     timestamp: new Date().toISOString(),
   });
 });
+
 // 404 handler
 app.use("*", (req, res) => {
   res.status(404).json({
@@ -67,13 +64,23 @@ app.use("*", (req, res) => {
   });
 });
 
-// Error handling middleware (must be last)
-// app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
-//   console.error(err.stack);
-//   res.status(500).send("Something broke!");
-// });
-
-const PORT = process.env.PORT || 4000;
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+// Error handling middleware
+app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
+  console.error(err.stack);
+  res.status(500).json({
+    success: false,
+    message: "Internal server error",
+    error: process.env.NODE_ENV === 'development' ? err.message : undefined
+  });
 });
+
+// For local development
+if (process.env.NODE_ENV !== 'production') {
+  const PORT = process.env.PORT || 4000;
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+  });
+}
+
+// Export for Vercel serverless
+export default app;
