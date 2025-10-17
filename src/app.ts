@@ -12,18 +12,16 @@ import PlatformRouter from "./routes/platform-routes";
 import TRMRouters from "./routes/trm-routes";
 import TripRoutes from "./routes/trip-routes";
 
-
-
 dotenv.config();
 
 const app = express();
-app.use(express.json());
 
-//ServerError handling
+// CORS configuration - MUST be before routes
 const allowedOrigins = [
   'http://localhost:3000',
-  'https://tracker-backend-drab.vercel.app/api/auth/login',
-  'https://device-tracker-dashboard-eight.vercel.app'
+  'http://localhost:5173', // Add if using Vite
+  'https://device-tracker-dashboard-eight.vercel.app',
+  'https://tracker-backend-drab.vercel.app' // Fixed: removed the path
 ];
 
 // Add environment variable if it exists
@@ -32,10 +30,21 @@ if (process.env.CMS_FRONTEND_URL) {
 }
 
 const corsOptions = {
-  origin: allowedOrigins,
-  credentials: true, // Allow credentials
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  origin: function (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) {
+    // Allow requests with no origin (like mobile apps, Postman, or server-to-server)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      console.log('Blocked origin:', origin); // For debugging
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  optionsSuccessStatus: 200 // For legacy browser support
 };
 
 app.use(cors(corsOptions));
@@ -51,7 +60,6 @@ app.use("/api/platform", PlatformRouter);
 app.use("/api/psw", TRMRouters);
 app.use("/api/trip", TripRoutes);
 
-
 // Health check endpoint
 app.get("/health", (req, res) => {
   res.status(200).json({
@@ -60,19 +68,23 @@ app.get("/health", (req, res) => {
     timestamp: new Date().toISOString(),
   });
 });
+
 // 404 handler
 app.use("*", (req, res) => {
   res.status(404).json({
     success: false,
-    message: "Something went wrong",
+    message: "Route not found",
   });
 });
 
 // Error handling middleware (must be last)
-// app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
-//   console.error(err.stack);
-//   res.status(500).send("Something broke!");
-// });
+app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
+  console.error('Error:', err.message);
+  res.status(500).json({
+    success: false,
+    message: err.message || "Internal server error"
+  });
+});
 
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
