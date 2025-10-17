@@ -22,6 +22,7 @@ app.use(express.json());
 //ServerError handling
 const allowedOrigins = [
   'http://localhost:3000',
+  'https://tracker-backend-drab.vercel.app/api/auth/login',
   'https://device-tracker-dashboard-eight.vercel.app'
 ];
 
