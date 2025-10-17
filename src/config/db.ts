@@ -1,11 +1,6 @@
 import { Pool, PoolClient } from "pg";  // Import only necessary methods and types
 require("dotenv").config();
-import fs from "fs";
 
-
-const sslConfig = process.env.NODE_ENV === 'production' 
-  ? { rejectUnauthorized: true, ca: fs.readFileSync('path/to/ca-cert.pem').toString() }
-  : { rejectUnauthorized: false };
 // Main connection pool for queries
 const pool = new Pool({
   host: process.env.DB_HOST,
@@ -13,7 +8,7 @@ const pool = new Pool({
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME,
-  ssl: { rejectUnauthorized: false },
+  ssl: false,
   connectionTimeoutMillis: 10000,
   idleTimeoutMillis: 100000,
 });
