@@ -21,9 +21,8 @@ app.use(express.json());
 
 //ServerError handling
 const allowedOrigins = [
-  'http://localhost:3000',
   'http://localhost:9000',
-  'https://device-tracker-dashboard-eight.vercel.app/'
+  'https://device-tracker-dashboard-eight.vercel.app'
 ];
 
 // Add environment variable if it exists
