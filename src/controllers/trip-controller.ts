@@ -1251,29 +1251,9 @@ class TripController {
 
     try {
       const form = req.body;
-
-      console.log("\n===========================================");
-      console.log(`🚀 CREATE TRIP REQUEST [${requestId}]`);
-      console.log("===========================================");
-      console.log("📝 Raw Form Data:");
-      console.log(JSON.stringify(form, null, 2));
-      console.log("⏰ Request Start Time:", new Date().toISOString());
-      console.log("📍 Request Headers:", {
-        "content-type": req.get("Content-Type"),
-        "user-agent": req.get("User-Agent"),
-        origin: req.get("Origin"),
-      });
-
-      // Since the data is already coming in the correct database format,
-      // we don't need field mapping transformation
       const transformedForm = { ...form };
-
-      console.log("\n📋 Transformed Form Data (Post-Processing):");
-      console.log(JSON.stringify(transformedForm, null, 2));
-
+      
       // Validate required fields
-      console.log("\n🔍 STEP 1: FIELD VALIDATION");
-      console.log("=========================================");
       const required = [
         "pmd_id",
         "csd_id",
@@ -1317,12 +1297,20 @@ class TripController {
 
       console.log("✅ All required fields validated successfully");
 
-      console.log("\n🔌 STEP 2: DATABASE CONNECTION");
+        console.log("\n🔌 STEP 2: DATABASE CONNECTION");
       console.log("=========================================");
       const client = await pool.connect();
       console.log("✅ Database connection established");
 
-      // Variables to track for rollback
+      // Set replica identity for eseal_devices table if not already set
+      try {
+        await client.query('ALTER TABLE eseal_devices REPLICA IDENTITY FULL');
+        console.log("✅ Replica identity set for eseal_devices table");
+      } catch (error) {
+        const pgError = error as { message?: string };
+        console.log("ℹ️ Replica identity might already be set:", pgError.message || "Unknown error");
+        // Continue with the process as the table might already have replica identity set
+      }      // Variables to track for rollback
       let assignmentId: number | null = null;
       let tripId: number | null = null;
       let vdaId: number | null = null;
@@ -1722,6 +1710,9 @@ class TripController {
           "expected_arrival",
           "status",
           "note",
+          "bl_number",
+          "gd_number",
+          "vir_number",
         ];
         const tripVals = [
           assignmentId,
@@ -1730,7 +1721,12 @@ class TripController {
           transformedForm.expected_arrival,
           transformedForm.status || "planned",
           transformedForm.note || "",
+          transformedForm.trm_data.bl_number || null,
+          transformedForm.trm_data.gd_number || null,
+          transformedForm.trm_data.vir_number || null,
         ];
+
+/
 
         const tripPlaceholders = tripVals
           .map((_, index) => `$${index + 1}`)
@@ -1920,12 +1916,39 @@ class TripController {
         const logPlaceholders = logVals
           .map((_, index) => `$${index + 1}`)
           .join(", ");
-        await client.query(
+        const tripLogResult = await client.query(
           `INSERT INTO trip_logs (${logCols.join(
             ", "
-          )}) VALUES (${logPlaceholders})`,
+          )}) VALUES (${logPlaceholders})
+          RETURNING id`,
           logVals
         );
+        const tripLogId = tripLogResult.rows[0].id;
+        console.log(`Trip log created with ID: ${tripLogId}`);
+
+        // Insert into public.add_trip_col
+        console.log("Step 5.1: Creating add_trip_col record...");
+        const addTripColQuery = `
+          INSERT INTO public.add_trip_col (
+            container_id,
+            carrier_id,
+            trip_log_id,
+            gd_no,
+            trip_type
+          ) VALUES ($1, $2, $3, $4, $5)
+          RETURNING id
+        `;
+
+        const addTripColVals = [
+          transformedForm.container_id || null,
+          transformedForm.carrier_id || null,
+          tripLogId,  // Now using the correct trip_log_id
+          transformedForm.trm_data.gd_number || null,
+          transformedForm.trm_data.declaration_type || null
+        ];
+
+        await client.query(addTripColQuery, addTripColVals);
+        console.log('✅ Additional trip columns created in add_trip_col table');
 
         // Commit transaction
         await client.query("COMMIT");
@@ -1954,16 +1977,22 @@ class TripController {
           console.log("❌ Error during rollback:", rollbackError);
         }
 
-        if (error.constraint) {
-          console.log(`   • Constraint Violation: ${error.constraint}`);
+        const pgError = error as { 
+          constraint?: string;
+          detail?: string;
+          hint?: string;
+        };
+
+        if (pgError.constraint) {
+          console.log(`   • Constraint Violation: ${pgError.constraint}`);
         }
 
-        if (error.detail) {
-          console.log(`   • Error Detail: ${error.detail}`);
+        if (pgError.detail) {
+          console.log(`   • Error Detail: ${pgError.detail}`);
         }
 
-        if (error.hint) {
-          console.log(`   • Error Hint: ${error.hint}`);
+        if (pgError.hint) {
+          console.log(`   • Error Hint: ${pgError.hint}`);
         }
 
 
