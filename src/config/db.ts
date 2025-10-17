@@ -8,12 +8,22 @@ const pool = new Pool({
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME,
-  ssl: {
-    rejectUnauthorized: false,  // Handle SSL for secure connections
-  },
+  ssl: false,
   connectionTimeoutMillis: 10000,
   idleTimeoutMillis: 100000,
 });
+// const pool = new Pool({
+//   host: process.env.DB_HOST,
+//   port: parseInt(process.env.DB_PORT || '5432', 10), // Ensure DB port is a number
+//   user: process.env.DB_USER,
+//   password: process.env.DB_PASSWORD,
+//   database: process.env.DB_NAME,
+//   ssl: {
+//     rejectUnauthorized: false,  // Handle SSL for secure connections
+//   },
+//   connectionTimeoutMillis: 10000,
+//   idleTimeoutMillis: 100000,
+// });
 
 // Dedicated connection for LISTEN/NOTIFY
 const notificationPool = new Pool({
